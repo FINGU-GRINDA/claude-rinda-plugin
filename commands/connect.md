@@ -29,6 +29,8 @@ After login, credentials are stored at `~/.rinda/credentials.json`:
 
 ## Workflow
 
+This command is standalone (it does not delegate to rinda-agent). It handles authentication only via the CLI binary — no API calls are made by Claude.
+
 ### Step 1 — Run the CLI login command
 
 Tell the user to run the following command in their terminal:
@@ -65,7 +67,7 @@ Calculate token expiry from `expiresAt` (milliseconds timestamp):
 
 ### Step 3 — Confirm readiness
 
-Tell the user they are now ready to use all RINDA commands:
+Tell the user they are now ready to use all RINDA skills:
 - `/rinda-ai:buyer-search` — discover leads
 - `/rinda-ai:enrich` — enrich contacts
 - `/rinda-ai:sequence-create` — create email sequences
