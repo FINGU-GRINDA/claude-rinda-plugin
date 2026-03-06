@@ -1,0 +1,124 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: rinda-cli-linux-x64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: rinda-cli-macos-x64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: rinda-cli-macos-arm64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: rinda-cli-windows-x64.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} -p rinda-cli
+
+      - name: Rename binary (Unix)
+        if: runner.os != 'Windows'
+        run: mv target/${{ matrix.target }}/release/rinda ${{ matrix.artifact }}
+
+      - name: Rename binary (Windows)
+        if: runner.os == 'Windows'
+        run: mv target/${{ matrix.target }}/release/rinda.exe ${{ matrix.artifact }}
+
+      - name: Generate SHA256 checksum (Unix)
+        if: runner.os != 'Windows'
+        run: sha256sum ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256
+
+      - name: Generate SHA256 checksum (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash ${{ matrix.artifact }} -Algorithm SHA256).Hash.ToLower()
+          "$hash  ${{ matrix.artifact }}" | Out-File -FilePath "${{ matrix.artifact }}.sha256" -Encoding ascii
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+      - name: Upload checksum artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}.sha256
+          path: ${{ matrix.artifact }}.sha256
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          CHANGELOG=$(git log --pretty=format:"- %s" "${PREVIOUS_TAG}..HEAD")
+          echo "changelog<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$CHANGELOG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: |
+            ## Changes
+
+            ${{ steps.changelog.outputs.changelog }}
+          files: |
+            artifacts/rinda-cli-linux-x64
+            artifacts/rinda-cli-linux-x64.sha256
+            artifacts/rinda-cli-macos-x64
+            artifacts/rinda-cli-macos-x64.sha256
+            artifacts/rinda-cli-macos-arm64
+            artifacts/rinda-cli-macos-arm64.sha256
+            artifacts/rinda-cli-windows-x64.exe
+            artifacts/rinda-cli-windows-x64.exe.sha256
