@@ -1,1 +1,4 @@
 .worktrees
+/target
+credentials.json
+.env
