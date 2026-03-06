@@ -12,10 +12,17 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
 use rinda_common::error::{Result, RindaError};
-use rinda_sdk::RindaClient;
-use rinda_sdk::models::auth::GoogleCallbackRequest;
+use rinda_sdk::apis::configuration::Configuration;
+use rinda_sdk::apis::default_api;
 
 use crate::credentials::Credentials;
+
+/// Build an SDK configuration with optional bearer token.
+pub fn sdk_config(bearer_token: Option<&str>) -> Configuration {
+    let mut config = Configuration::new();
+    config.bearer_access_token = bearer_token.map(|t| t.to_string());
+    config
+}
 
 /// Run the full OAuth flow: open browser, wait for callback, exchange code, fetch profile.
 pub async fn run_oauth_flow() -> Result<Credentials> {
@@ -52,8 +59,12 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
     })?;
 
     // Get the Google auth URL.
-    let client = RindaClient::new();
-    let google_url = client.google_auth_url();
+    let config = sdk_config(None);
+    let google_url = format!(
+        "{}/api/v1/auth/google?redirect_uri={}",
+        config.base_path,
+        urlencoding::encode("http://localhost:9876/callback")
+    );
 
     // Open the browser.
     println!("Opening browser for Google login...");
@@ -81,16 +92,24 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
     .map_err(|_| RindaError::Auth("Timed out waiting for OAuth callback (120 s). Please try again.".into()))??;
 
     // Exchange the code for tokens.
-    let callback_resp = client
-        .google_callback(&GoogleCallbackRequest { code })
+    let mut body = HashMap::new();
+    body.insert("code".to_string(), serde_json::Value::String(code));
+
+    let callback_resp = default_api::post_api_v1_auth_google_callback(&config, body)
         .await
         .map_err(|e| RindaError::Auth(format!("Token exchange failed: {e}")))?;
 
     let access_token = callback_resp
-        .token
-        .ok_or_else(|| RindaError::Auth("No access token in callback response".into()))?;
+        .get("token")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| RindaError::Auth("No access token in callback response".into()))?
+        .to_string();
 
-    let refresh_token = callback_resp.refresh_token.unwrap_or_default();
+    let refresh_token = callback_resp
+        .get("refreshToken")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
 
     // Compute expiry: now + 1 hour in milliseconds.
     let now_ms = std::time::SystemTime::now()
@@ -100,17 +119,27 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
     let expires_at = now_ms + 3_600_000;
 
     // Fetch user profile with the new token.
-    let mut authed_client = RindaClient::new();
-    authed_client.set_access_token(&access_token);
+    let authed_config = sdk_config(Some(&access_token));
 
-    let profile = authed_client
-        .me()
+    let profile = default_api::get_api_v1_auth_me(&authed_config)
         .await
         .map_err(|e| RindaError::Auth(format!("Failed to fetch user profile: {e}")))?;
 
-    let email = profile.email.unwrap_or_default();
-    let user_id = profile.id.unwrap_or_default();
-    let workspace_id = profile.workspace_id.unwrap_or_default();
+    let email = profile
+        .get("email")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let user_id = profile
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let workspace_id = profile
+        .get("workspaceId")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
 
     Ok(Credentials {
         access_token,

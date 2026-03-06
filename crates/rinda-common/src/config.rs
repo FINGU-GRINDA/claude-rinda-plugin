@@ -10,5 +10,5 @@ pub fn credentials_path() -> Option<PathBuf> {
     rinda_config_dir().map(|dir| dir.join("credentials.json"))
 }
 
-/// Base URL for the Rinda API.
-pub const BASE_URL: &str = "https://beta.rinda.ai/api/v1";
+/// Base URL for the Rinda API (host only, no path prefix).
+pub const BASE_URL: &str = "https://app.rinda.ai";
