@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "rinda-cli": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli",
+      "args": ["mcp", "serve"],
+      "env": {}
+    }
+  }
+}

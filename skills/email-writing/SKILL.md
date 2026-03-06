@@ -50,4 +50,4 @@ Never use: ALL CAPS, exclamation marks, or fake "RE:" prefixes.
 
 ## Tone
 
-Use `settings.json` → `email.tone` (default: `professional`). Adapt tone per target market and buyer culture.
+Default tone: `professional`. Adapt tone per target market and buyer culture. Common options: `professional`, `friendly`, `formal`, `casual`.
