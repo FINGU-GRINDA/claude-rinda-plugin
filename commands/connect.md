@@ -1,3 +1,9 @@
+---
+description: Connect your RINDA AI account via Google OAuth. Run once before using other RINDA commands.
+allowed-tools: ["Bash", "Read"]
+argument-hint: "(no arguments needed)"
+---
+
 # /rinda-ai:connect
 
 Connect your RINDA AI account via Google OAuth. Run this once before using any other RINDA commands.

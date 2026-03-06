@@ -27,7 +27,7 @@ This agent is invoked by the `/rinda:enrich` command or automatically after `/ri
 ## Base URL
 
 ```
-https://beta.rinda.ai/api/v1
+https://app.rinda.ai/api/v1
 ```
 
 ## Workflow
