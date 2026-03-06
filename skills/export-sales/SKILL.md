@@ -8,14 +8,14 @@ description: Domain knowledge for B2B export sales workflows including buyer sea
 
 - Always exclude buyers previously contacted (check workspace history before searching).
 - Supported buyer types: Importer, Distributor, Wholesaler, Retailer.
-- Default filters (override via `settings.json` → `targetMarket`):
-  - Annual revenue >= $1M (`targetMarket.minRevenue`)
-  - Employee count >= 10 (`targetMarket.minEmployees`)
-- Default search quantity: 50 buyers per run (`targetMarket.searchQuantity`).
+- Default filters:
+  - Annual revenue >= $1M (minimum revenue threshold)
+  - Employee count >= 10 (minimum employee count)
+- Default search quantity: 50 buyers per run.
 
 ## Follow-up Cadence
 
-Use `settings.json` → `email.followUpDays` to override defaults.
+Default follow-up cadence (adjust as needed for your outreach strategy):
 
 | Day | Action |
 |-----|--------|

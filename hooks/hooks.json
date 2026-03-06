@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": ".*",
+        "matcher": "mcp__rinda-cli",
         "hooks": [
           {
             "type": "command",

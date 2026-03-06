@@ -28,10 +28,10 @@ Apply weights: multiply each raw score (0–4) by its weight percentage, then su
 
 ## Minimum Qualification Thresholds
 
-A buyer must meet **all** of the following (override via `settings.json` → `targetMarket`):
+A buyer must meet **all** of the following:
 
-- Annual revenue >= $1M (`targetMarket.minRevenue`)
-- Employee count >= 10 (`targetMarket.minEmployees`)
+- Annual revenue >= $1M (default minimum revenue threshold)
+- Employee count >= 10 (default minimum employee count)
 - Valid business registration
 - Active presence in the target market
 
