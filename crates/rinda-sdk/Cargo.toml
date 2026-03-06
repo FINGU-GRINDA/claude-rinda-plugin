@@ -1,0 +1,14 @@
+[package]
+name = "rinda-sdk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+rinda-common = { path = "../rinda-common" }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+url = "2"
