@@ -1,0 +1,13 @@
+{
+  "name": "rinda-ai",
+  "description": "RINDA AI - B2B export sales automation. Buyer search, enrichment, email sequences, reply management.",
+  "version": "1.0.0",
+  "author": {
+    "name": "GRINDA AI",
+    "email": "support@grinda.ai"
+  },
+  "homepage": "https://rinda.ai",
+  "repository": "https://github.com/FINGU-GRINDA/claude-rinda-plugin",
+  "license": "MIT",
+  "keywords": ["sales", "export", "b2b", "outreach", "email"]
+}
