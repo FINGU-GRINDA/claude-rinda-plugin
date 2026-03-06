@@ -1,4 +1,8 @@
-# /rinda-ai:buyer-search
+---
+description: Search for B2B buyers matching your export target profile. Discovers leads, polls results, scores and ranks them.
+---
+
+# Buyer Search Skill
 
 Search for B2B buyers matching your export target profile. Runs a lead discovery search, polls for results, scores and ranks leads, then offers to create an email sequence.
 
@@ -6,9 +10,9 @@ Search for B2B buyers matching your export target profile. Runs a lead discovery
 
 - `industry` (string, **required**) — Industry or product category to search for. Examples: "cosmetics", "industrial machinery", "organic food".
 - `country` (string, **required**) — Target country or region. Examples: "US", "Germany", "Southeast Asia".
-- `buyer_type` (string[], optional, default: `["importer", "distributor", "wholesaler"]` from `settings.json`) — Types of buyers to target.
-- `min_size` (number, optional, default: `1000000` from `settings.json` `targetMarket.minRevenue`) — Minimum annual revenue in USD.
-- `quantity` (number, optional, default: `50` from `settings.json` `search.defaultQuantity`) — Number of results to fetch.
+- `buyer_type` (string[], optional, default: `["importer", "distributor", "wholesaler"]`) — Types of buyers to target.
+- `min_size` (number, optional, default: `1000000`) — Minimum annual revenue in USD.
+- `quantity` (number, optional, default: `50`) — Number of results to fetch.
 
 Before calling the API, confirm parameters with the user if `industry` or `country` are missing.
 

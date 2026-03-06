@@ -1,4 +1,8 @@
-# /rinda-ai:campaign-report
+---
+description: Generate a campaign performance report with funnel metrics, email statistics, hot leads, and actionable insights. Optionally drill down into a specific sequence.
+---
+
+# Campaign Report Skill
 
 Generate a campaign performance report with funnel metrics, email statistics, hot leads, and actionable insights. Optionally drill down into a specific sequence.
 
@@ -202,4 +206,4 @@ SUBSCRIPTION
 
 ## Related Skills
 
-None. This command is purely analytical and uses built-in benchmark thresholds for insights.
+None. This skill is purely analytical and uses built-in benchmark thresholds for insights.

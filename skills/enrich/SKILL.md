@@ -1,10 +1,14 @@
-# /rinda-ai:enrich
+---
+description: Enrich a list of leads with contact details, social media profiles, and product information. Use after buyer-search to find decision-maker emails and LinkedIn profiles.
+---
 
-Enrich a list of leads with contact details, social media profiles, and product information. Use after `/rinda-ai:buyer-search` to find decision-maker emails and LinkedIn profiles.
+# Enrich Leads Skill
+
+Enrich a list of leads with contact details, social media profiles, and product information. Use after buyer-search to find decision-maker emails and LinkedIn profiles.
 
 ## Parameters
 
-- `lead_ids` (string[], **required**) — Array of lead IDs to enrich. Obtain these from a prior `/rinda-ai:buyer-search` result. Example: `["lead_abc123", "lead_def456"]`.
+- `lead_ids` (string[], **required**) — Array of lead IDs to enrich. Obtain these from a prior buyer-search result. Example: `["lead_abc123", "lead_def456"]`.
 
 If the user says "enrich these leads" without specifying IDs, use the lead IDs from the most recent buyer-search results in the conversation.
 

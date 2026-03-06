@@ -1,4 +1,8 @@
-# /rinda-ai:reply-check
+---
+description: Check unread email replies from leads, classify them by intent, and get a prioritized action list telling you exactly what to do with each reply.
+---
+
+# Reply Check Skill
 
 Check unread email replies from leads, classify them by intent, and get a prioritized action list telling you exactly what to do with each reply.
 
