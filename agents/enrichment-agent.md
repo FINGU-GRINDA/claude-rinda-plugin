@@ -1,3 +1,8 @@
+---
+name: enrichment-agent
+description: Parallel lead enrichment sub-agent that processes batches of lead IDs to fetch contact details (email, phone, LinkedIn) via the RINDA API. Invoked by /rinda:enrich or after /rinda:buyer-search.
+---
+
 # Enrichment Sub-Agent
 
 > Parallel enrichment of multiple leads with progress reporting and failure handling.
