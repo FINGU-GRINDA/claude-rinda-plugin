@@ -1,5 +1,8 @@
+//! Rinda SDK — auto-generated API client.
+//!
+//! Generated from `doc/openapi.json` via openapi-generator. Do not edit manually.
 #![allow(unused_imports)]
-#![allow(clippy::too_many_arguments)]
+#![allow(clippy::all)]
 
 extern crate reqwest;
 extern crate serde;
