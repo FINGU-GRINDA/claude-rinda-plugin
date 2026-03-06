@@ -1,3 +1,7 @@
+---
+description: Guidelines for writing B2B export sales emails including personalization requirements, subject line formulas, body structure, and follow-up rules. Use when composing or reviewing outreach emails to potential buyers.
+---
+
 # B2B Export Email Writing Guide
 
 ## Personalization Requirements
