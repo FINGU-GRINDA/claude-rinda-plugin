@@ -1,0 +1,20 @@
+{
+  "name": "rinda-tools",
+  "owner": {
+    "name": "GRINDA AI",
+    "email": "support@grinda.ai"
+  },
+  "metadata": {
+    "description": "B2B export sales automation plugins"
+  },
+  "plugins": [
+    {
+      "name": "rinda-ai",
+      "source": "./",
+      "description": "Buyer search, enrichment, email sequences, reply management",
+      "version": "1.0.0",
+      "category": "sales",
+      "tags": ["b2b", "export", "outreach"]
+    }
+  ]
+}
