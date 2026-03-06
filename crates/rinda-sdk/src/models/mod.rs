@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod common;
 pub mod dashboard;
 pub mod enrichment;
 pub mod leads;
