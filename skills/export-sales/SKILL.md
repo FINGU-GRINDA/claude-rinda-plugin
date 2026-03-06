@@ -1,3 +1,7 @@
+---
+description: Domain knowledge for B2B export sales workflows including buyer search rules, follow-up cadence, response classification, and reactivation rules. Use when handling export sales tasks, managing buyer outreach sequences, or classifying buyer responses.
+---
+
 # Export Sales Agent Guide
 
 ## Buyer Search Rules

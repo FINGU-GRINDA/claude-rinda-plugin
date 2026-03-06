@@ -1,3 +1,7 @@
+---
+description: Scoring criteria and qualification rules for evaluating potential B2B buyers. Use when scoring, ranking, or filtering buyers by revenue, employee count, import history, and product relevance.
+---
+
 # Buyer Qualification & Scoring Guide
 
 ## Scoring Criteria (Weighted)
