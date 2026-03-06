@@ -1,8 +1,12 @@
 use std::process;
 
 use clap::{Args, Subcommand};
+use rinda_sdk::models::auth::RefreshRequest;
+use rinda_sdk::{RindaClient, SdkError};
 
-use crate::credentials::Credentials;
+use crate::credentials::{
+    self, extract_exp_from_jwt, is_token_valid, load_credentials, save_credentials, Credentials,
+};
 use crate::oauth;
 
 #[derive(Debug, Args)]
@@ -19,6 +23,8 @@ pub enum AuthCommands {
     Status,
     /// Log out and clear credentials
     Logout,
+    /// Ensure credentials are valid (refresh if needed). Called by plugin hook.
+    EnsureValid,
 }
 
 pub async fn run(args: AuthArgs) {
@@ -85,6 +91,77 @@ pub async fn run(args: AuthArgs) {
                 process::exit(1);
             }
             println!("Logged out successfully.");
+        }
+
+        AuthCommands::EnsureValid => {
+            ensure_valid().await;
+        }
+    }
+}
+
+async fn ensure_valid() {
+    let creds = match load_credentials() {
+        Ok(c) => c,
+        Err(credentials::CredError::NotLoggedIn) => {
+            eprintln!("Not logged in. Run: rinda-cli auth login");
+            process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            process::exit(1);
+        }
+    };
+
+    // Fast path: token is still valid — no network call needed.
+    if is_token_valid(&creds) {
+        process::exit(0);
+    }
+
+    // Token is expired or expiring soon — attempt a refresh.
+    let client = RindaClient::new();
+    let req = RefreshRequest {
+        refresh_token: creds.refresh_token.clone(),
+    };
+
+    match client.refresh(&req).await {
+        Ok(resp) => {
+            let new_token = match resp.token {
+                Some(t) => t,
+                None => {
+                    eprintln!("Session expired. Run: rinda-cli auth login");
+                    process::exit(1);
+                }
+            };
+            let new_refresh_token = resp.refresh_token.unwrap_or(creds.refresh_token);
+            let new_expires_at = extract_exp_from_jwt(&new_token);
+
+            let new_creds = Credentials {
+                access_token: new_token,
+                refresh_token: new_refresh_token,
+                expires_at: new_expires_at,
+                workspace_id: creds.workspace_id,
+                user_id: creds.user_id,
+                email: creds.email,
+            };
+
+            if let Err(e) = save_credentials(&new_creds) {
+                eprintln!("Failed to save credentials: {e}");
+                process::exit(1);
+            }
+
+            process::exit(0);
+        }
+        Err(SdkError::Api { status: 401, .. }) => {
+            eprintln!("Session expired. Run: rinda-cli auth login");
+            process::exit(1);
+        }
+        Err(SdkError::Http(e)) if e.is_connect() || e.is_timeout() => {
+            eprintln!("Cannot reach RINDA API. Check your connection.");
+            process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Token refresh failed: {e}");
+            process::exit(1);
         }
     }
 }
