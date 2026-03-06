@@ -1,7 +1,11 @@
-pub mod client;
-pub mod endpoints;
-pub mod error;
-pub mod models;
+#![allow(unused_imports)]
+#![allow(clippy::too_many_arguments)]
 
-pub use client::RindaClient;
-pub use error::{Result, SdkError};
+extern crate serde_repr;
+extern crate serde;
+extern crate serde_json;
+extern crate url;
+extern crate reqwest;
+
+pub mod apis;
+pub mod models;

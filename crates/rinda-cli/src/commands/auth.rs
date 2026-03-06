@@ -1,8 +1,8 @@
+use std::collections::HashMap;
 use std::process;
 
 use clap::{Args, Subcommand};
-use rinda_sdk::models::auth::RefreshRequest;
-use rinda_sdk::{RindaClient, SdkError};
+use rinda_sdk::apis::default_api;
 
 use crate::credentials::{
     self, extract_exp_from_jwt, is_token_valid, load_credentials, save_credentials, Credentials,
@@ -103,7 +103,7 @@ async fn ensure_valid() {
     let creds = match load_credentials() {
         Ok(c) => c,
         Err(credentials::CredError::NotLoggedIn) => {
-            eprintln!("Not logged in. Run: rinda-cli auth login");
+            eprintln!("Not logged in. Run: rinda auth login");
             process::exit(1);
         }
         Err(e) => {
@@ -118,21 +118,27 @@ async fn ensure_valid() {
     }
 
     // Token is expired or expiring soon — attempt a refresh.
-    let client = RindaClient::new();
-    let req = RefreshRequest {
-        refresh_token: creds.refresh_token.clone(),
-    };
+    let config = oauth::sdk_config(None);
+    let mut body = HashMap::new();
+    body.insert(
+        "refreshToken".to_string(),
+        serde_json::Value::String(creds.refresh_token.clone()),
+    );
 
-    match client.refresh(&req).await {
+    match default_api::post_api_v1_auth_refresh(&config, body).await {
         Ok(resp) => {
-            let new_token = match resp.token {
-                Some(t) => t,
+            let new_token = match resp.get("token").and_then(|v| v.as_str()) {
+                Some(t) => t.to_string(),
                 None => {
-                    eprintln!("Session expired. Run: rinda-cli auth login");
+                    eprintln!("Session expired. Run: rinda auth login");
                     process::exit(1);
                 }
             };
-            let new_refresh_token = resp.refresh_token.unwrap_or(creds.refresh_token);
+            let new_refresh_token = resp
+                .get("refreshToken")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or(creds.refresh_token);
             let new_expires_at = extract_exp_from_jwt(&new_token);
 
             let new_creds = Credentials {
@@ -151,15 +157,16 @@ async fn ensure_valid() {
 
             process::exit(0);
         }
-        Err(SdkError::Api { status: 401, .. }) => {
-            eprintln!("Session expired. Run: rinda-cli auth login");
-            process::exit(1);
-        }
-        Err(SdkError::Http(e)) if e.is_connect() || e.is_timeout() => {
-            eprintln!("Cannot reach RINDA API. Check your connection.");
-            process::exit(1);
-        }
         Err(e) => {
+            let err_str = format!("{e}");
+            if err_str.contains("401") || err_str.contains("status code 401") {
+                eprintln!("Session expired. Run: rinda auth login");
+                process::exit(1);
+            }
+            if err_str.contains("connect") || err_str.contains("timeout") {
+                eprintln!("Cannot reach RINDA API. Check your connection.");
+                process::exit(1);
+            }
             eprintln!("Token refresh failed: {e}");
             process::exit(1);
         }
