@@ -12,13 +12,10 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct GetApiV1PersonalizedEmailsListBySequenceIdLimitParameter {
-}
+pub struct GetApiV1PersonalizedEmailsListBySequenceIdLimitParameter {}
 
 impl GetApiV1PersonalizedEmailsListBySequenceIdLimitParameter {
     pub fn new() -> GetApiV1PersonalizedEmailsListBySequenceIdLimitParameter {
-        GetApiV1PersonalizedEmailsListBySequenceIdLimitParameter {
-        }
+        GetApiV1PersonalizedEmailsListBySequenceIdLimitParameter {}
     }
 }
-

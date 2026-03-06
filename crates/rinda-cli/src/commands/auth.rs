@@ -5,7 +5,7 @@ use clap::{Args, Subcommand};
 use rinda_sdk::apis::default_api;
 
 use crate::credentials::{
-    self, extract_exp_from_jwt, is_token_valid, load_credentials, save_credentials, Credentials,
+    self, Credentials, extract_exp_from_jwt, is_token_valid, load_credentials, save_credentials,
 };
 use crate::oauth;
 

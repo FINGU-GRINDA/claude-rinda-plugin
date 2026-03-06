@@ -17,31 +17,76 @@ pub struct PostApiV1VisitorsTrackRequest {
     #[serde(rename = "workspaceId")]
     pub workspace_id: String,
     /// Visitor IP address (optional - auto-extracted from CF-Connecting-IP, X-Forwarded-For, or X-Real-IP headers)
-    #[serde(rename = "ipAddress", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "ipAddress",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub ip_address: Option<Option<String>>,
     /// Browser user agent
-    #[serde(rename = "userAgent", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "userAgent",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub user_agent: Option<Option<String>>,
     /// Referrer URL
-    #[serde(rename = "referrer", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "referrer",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub referrer: Option<Option<String>>,
     /// Landing page URL
-    #[serde(rename = "landingPage", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "landingPage",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub landing_page: Option<Option<String>>,
     /// UTM source parameter
-    #[serde(rename = "utmSource", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "utmSource",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub utm_source: Option<Option<String>>,
     /// UTM medium parameter
-    #[serde(rename = "utmMedium", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "utmMedium",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub utm_medium: Option<Option<String>>,
     /// UTM campaign parameter
-    #[serde(rename = "utmCampaign", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "utmCampaign",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub utm_campaign: Option<Option<String>>,
     /// UTM term parameter
-    #[serde(rename = "utmTerm", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "utmTerm",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub utm_term: Option<Option<String>>,
     /// UTM content parameter
-    #[serde(rename = "utmContent", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "utmContent",
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub utm_content: Option<Option<String>>,
 }
 
@@ -61,4 +106,3 @@ impl PostApiV1VisitorsTrackRequest {
         }
     }
 }
-

@@ -12,13 +12,10 @@ use crate::models;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
-pub struct PostApiV1LeadsBulk200ResponseLeadsInnerCreatedAt {
-}
+pub struct PostApiV1LeadsBulk200ResponseLeadsInnerCreatedAt {}
 
 impl PostApiV1LeadsBulk200ResponseLeadsInnerCreatedAt {
     pub fn new() -> PostApiV1LeadsBulk200ResponseLeadsInnerCreatedAt {
-        PostApiV1LeadsBulk200ResponseLeadsInnerCreatedAt {
-        }
+        PostApiV1LeadsBulk200ResponseLeadsInnerCreatedAt {}
     }
 }
-

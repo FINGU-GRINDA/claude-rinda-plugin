@@ -19,7 +19,10 @@ pub struct PostApiV1LeadsBulk200ResponseDuplicateEmailsInner {
     pub existing_lead_id: String,
     #[serde(rename = "companyName", skip_serializing_if = "Option::is_none")]
     pub company_name: Option<String>,
-    #[serde(rename = "existingCompanyName", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "existingCompanyName",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub existing_company_name: Option<String>,
     #[serde(rename = "customerGroupIds", skip_serializing_if = "Option::is_none")]
     pub customer_group_ids: Option<Vec<uuid::Uuid>>,
@@ -28,7 +31,11 @@ pub struct PostApiV1LeadsBulk200ResponseDuplicateEmailsInner {
 }
 
 impl PostApiV1LeadsBulk200ResponseDuplicateEmailsInner {
-    pub fn new(email: String, existing_lead_id: String, r#type: Type) -> PostApiV1LeadsBulk200ResponseDuplicateEmailsInner {
+    pub fn new(
+        email: String,
+        existing_lead_id: String,
+        r#type: Type,
+    ) -> PostApiV1LeadsBulk200ResponseDuplicateEmailsInner {
         PostApiV1LeadsBulk200ResponseDuplicateEmailsInner {
             email,
             existing_lead_id,
@@ -39,7 +46,7 @@ impl PostApiV1LeadsBulk200ResponseDuplicateEmailsInner {
         }
     }
 }
-/// 
+///
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum Type {
     #[serde(rename = "database")]
@@ -53,4 +60,3 @@ impl Default for Type {
         Self::Database
     }
 }
-

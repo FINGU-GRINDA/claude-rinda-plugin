@@ -40,7 +40,20 @@ pub struct PostApiV1LeadsBulk200ResponseLeadsInner {
 }
 
 impl PostApiV1LeadsBulk200ResponseLeadsInner {
-    pub fn new(id: uuid::Uuid, company_name: Option<String>, found_company_name: Option<String>, business_type: Option<String>, website_url: Option<String>, description: Option<String>, country: Option<String>, city: Option<String>, lead_status: Option<String>, lead_score: Option<f64>, created_by: Option<uuid::Uuid>, created_at: models::PostApiV1LeadsBulk200ResponseLeadsInnerCreatedAt) -> PostApiV1LeadsBulk200ResponseLeadsInner {
+    pub fn new(
+        id: uuid::Uuid,
+        company_name: Option<String>,
+        found_company_name: Option<String>,
+        business_type: Option<String>,
+        website_url: Option<String>,
+        description: Option<String>,
+        country: Option<String>,
+        city: Option<String>,
+        lead_status: Option<String>,
+        lead_score: Option<f64>,
+        created_by: Option<uuid::Uuid>,
+        created_at: models::PostApiV1LeadsBulk200ResponseLeadsInnerCreatedAt,
+    ) -> PostApiV1LeadsBulk200ResponseLeadsInner {
         PostApiV1LeadsBulk200ResponseLeadsInner {
             id,
             company_name,
@@ -57,4 +70,3 @@ impl PostApiV1LeadsBulk200ResponseLeadsInner {
         }
     }
 }
-

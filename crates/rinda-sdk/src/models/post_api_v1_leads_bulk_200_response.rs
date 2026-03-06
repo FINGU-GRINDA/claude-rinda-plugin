@@ -22,7 +22,11 @@ pub struct PostApiV1LeadsBulk200Response {
 }
 
 impl PostApiV1LeadsBulk200Response {
-    pub fn new(leads: Vec<models::PostApiV1LeadsBulk200ResponseLeadsInner>, duplicate_emails: Vec<models::PostApiV1LeadsBulk200ResponseDuplicateEmailsInner>, stats: models::PostApiV1LeadsBulk200ResponseStats) -> PostApiV1LeadsBulk200Response {
+    pub fn new(
+        leads: Vec<models::PostApiV1LeadsBulk200ResponseLeadsInner>,
+        duplicate_emails: Vec<models::PostApiV1LeadsBulk200ResponseDuplicateEmailsInner>,
+        stats: models::PostApiV1LeadsBulk200ResponseStats,
+    ) -> PostApiV1LeadsBulk200Response {
         PostApiV1LeadsBulk200Response {
             leads,
             duplicate_emails,
@@ -30,4 +34,3 @@ impl PostApiV1LeadsBulk200Response {
         }
     }
 }
-
