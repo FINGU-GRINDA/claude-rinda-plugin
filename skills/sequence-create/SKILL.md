@@ -1,4 +1,8 @@
-# /rinda-ai:sequence-create
+---
+description: Create an AI-generated multi-step email sequence and enroll leads into it. Covers sequence creation, AI content generation, user approval, and bulk enrollment with scheduling.
+---
+
+# Sequence Create Skill
 
 Create an AI-generated multi-step email sequence and enroll leads into it. Covers sequence creation, AI content generation, user approval, and bulk enrollment with scheduling.
 
@@ -6,8 +10,8 @@ Create an AI-generated multi-step email sequence and enroll leads into it. Cover
 
 - `name` (string, **required**) — Name for the email sequence. Example: "US Cosmetics Q1 Outreach".
 - `customer_group_id` (string, optional) — ID of the customer group (target segment) to associate with the sequence. If omitted, the sequence is created without a group association.
-- `tone` (string, optional, default: `"professional"` from `settings.json` `email.tone`) — Email tone. Options: `"professional"`, `"friendly"`, `"formal"`, `"casual"`.
-- `language` (string, optional, default: `"en"` from `settings.json` `email.language`) — Language code for generated emails. Example: `"en"`, `"de"`, `"fr"`.
+- `tone` (string, optional, default: `"professional"`) — Email tone. Options: `"professional"`, `"friendly"`, `"formal"`, `"casual"`.
+- `language` (string, optional, default: `"en"`) — Language code for generated emails. Example: `"en"`, `"de"`, `"fr"`.
 - `step_count` (number, optional, default: `6`) — Number of email steps in the sequence.
 - `lead_ids` (string[], optional) — Lead IDs to enroll after generation. If not provided, ask the user whether to enroll leads now or later.
 - `user_email_account_id` (string, optional) — Email account ID to send from. Ask the user if not provided and lead enrollment is requested.
