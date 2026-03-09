@@ -11,17 +11,29 @@ use axum::routing::get;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-use rinda_common::error::{Result, RindaError};
-use rinda_sdk::apis::configuration::Configuration;
-use rinda_sdk::apis::default_api;
-
+use crate::config::BASE_URL;
 use crate::credentials::Credentials;
+use crate::error::{Result, RindaError};
 
-/// Build an SDK configuration with optional bearer token.
-pub fn sdk_config(bearer_token: Option<&str>) -> Configuration {
-    let mut config = Configuration::new();
-    config.bearer_access_token = bearer_token.map(|t| t.to_string());
-    config
+/// Build a progenitor SDK client with an optional bearer token.
+/// When `bearer_token` is `None`, no Authorization header is added.
+pub fn sdk_client(bearer_token: Option<&str>) -> rinda_sdk::Client {
+    if let Some(token) = bearer_token {
+        let auth_value = format!("Bearer {token}");
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            reqwest::header::AUTHORIZATION,
+            reqwest::header::HeaderValue::from_str(&auth_value)
+                .expect("Bearer token contains invalid header characters"),
+        );
+        let reqwest_client = reqwest::Client::builder()
+            .default_headers(headers)
+            .build()
+            .expect("Failed to build reqwest client");
+        rinda_sdk::Client::new_with_client(BASE_URL, reqwest_client)
+    } else {
+        rinda_sdk::Client::new(BASE_URL)
+    }
 }
 
 /// Run the full OAuth flow: open browser, wait for callback, exchange code, fetch profile.
@@ -58,11 +70,9 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
         ))
     })?;
 
-    // Get the Google auth URL.
-    let config = sdk_config(None);
+    // Build the Google auth URL.
     let google_url = format!(
-        "{}/api/v1/auth/google?redirect_uri={}",
-        config.base_path,
+        "{BASE_URL}/api/v1/auth/google?redirect_uri={}",
         urlencoding::encode("http://localhost:9876/callback")
     );
 
@@ -92,12 +102,15 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
     .map_err(|_| RindaError::Auth("Timed out waiting for OAuth callback (120 s). Please try again.".into()))??;
 
     // Exchange the code for tokens.
-    let mut body = HashMap::new();
+    let mut body = serde_json::Map::new();
     body.insert("code".to_string(), serde_json::Value::String(code));
 
-    let callback_resp = default_api::post_api_v1_auth_google_callback(&config, body)
+    let client = sdk_client(None);
+    let callback_resp = client
+        .post_api_v1_auth_google_callback(&body)
         .await
-        .map_err(|e| RindaError::Auth(format!("Token exchange failed: {e}")))?;
+        .map_err(|e| RindaError::Auth(format!("Token exchange failed: {e}")))?
+        .into_inner();
 
     let access_token = callback_resp
         .get("token")
@@ -119,11 +132,12 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
     let expires_at = now_ms + 3_600_000;
 
     // Fetch user profile with the new token.
-    let authed_config = sdk_config(Some(&access_token));
-
-    let profile = default_api::get_api_v1_auth_me(&authed_config)
+    let authed_client = sdk_client(Some(&access_token));
+    let profile = authed_client
+        .get_api_v1_auth_me()
         .await
-        .map_err(|e| RindaError::Auth(format!("Failed to fetch user profile: {e}")))?;
+        .map_err(|e| RindaError::Auth(format!("Failed to fetch user profile: {e}")))?
+        .into_inner();
 
     let email = profile
         .get("email")

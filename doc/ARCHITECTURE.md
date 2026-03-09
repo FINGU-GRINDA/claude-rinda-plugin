@@ -87,12 +87,25 @@ rinda-ai/
 │   └── enrichment-agent.md       # Sub-agent for parallel enrichment
 ├── .mcp.json                     # MCP server config (optional, for connectors)
 ├── settings.json                 # Default plugin settings
-└── cli/
-    ├── package.json              # bun dependencies (minimal)
-    └── src/
-        ├── index.ts              # CLI entry (login, refresh, status)
-        ├── oauth.ts              # Google OAuth flow (localhost callback)
-        └── credentials.ts        # Read/write ~/.rinda/credentials.json
+├── crates/
+│   ├── sdk/                      # rinda-sdk: progenitor-generated from doc/openapi-patched.json
+│   │   ├── Cargo.toml
+│   │   ├── build.rs              # Code generation via progenitor at build time
+│   │   └── src/lib.rs
+│   └── cli/                      # rinda-cli: CLI binary (name: "rinda")
+│       ├── Cargo.toml
+│       └── src/
+│           ├── main.rs           # CLI entry (clap subcommands)
+│           ├── config.rs         # Paths and BASE_URL (inlined from former rinda-common)
+│           ├── error.rs          # RindaError enum (inlined from former rinda-common)
+│           ├── credentials.rs    # Read/write ~/.rinda/credentials.json
+│           ├── oauth.rs          # Google OAuth flow (localhost callback)
+│           └── commands/
+│               ├── auth.rs       # auth login/logout/status/ensure-valid
+│               └── config.rs     # config show
+└── doc/
+    ├── openapi.json              # Raw OpenAPI spec (synced from upstream)
+    └── openapi-patched.json      # Patched spec used for SDK generation
 ```
 
 > **Note**: Commands, agents, skills, and hooks go at the **plugin root**, NOT inside `.claude-plugin/`. Only `plugin.json` and `marketplace.json` belong in `.claude-plugin/`.
