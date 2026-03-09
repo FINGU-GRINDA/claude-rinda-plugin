@@ -12,7 +12,7 @@ pub async fn get_authenticated_client() -> (rinda_sdk::Client, Credentials) {
     let creds = match load_credentials() {
         Ok(c) => c,
         Err(credentials::CredError::NotLoggedIn) => {
-            eprintln!("Not logged in. Run: rinda auth login");
+            eprintln!("Not logged in. Run: rinda auth url");
             process::exit(1);
         }
         Err(e) => {
@@ -27,7 +27,13 @@ pub async fn get_authenticated_client() -> (rinda_sdk::Client, Credentials) {
         return (client, creds);
     }
 
-    // Token expired or expiring soon — attempt a refresh.
+    // No refresh token — can't refresh, ask user to re-login.
+    if creds.refresh_token.is_empty() {
+        eprintln!("Session expired. Get a new token at: rinda auth url");
+        process::exit(1);
+    }
+
+    // Attempt a refresh.
     let refresh_client = oauth::sdk_client(None);
     let mut body = serde_json::Map::new();
     body.insert(
@@ -41,7 +47,7 @@ pub async fn get_authenticated_client() -> (rinda_sdk::Client, Credentials) {
             let new_token = match resp.get("token").and_then(|v| v.as_str()) {
                 Some(t) => t.to_string(),
                 None => {
-                    eprintln!("Session expired. Run: rinda auth login");
+                    eprintln!("Session expired. Get a new token at: rinda auth url");
                     process::exit(1);
                 }
             };
@@ -72,7 +78,7 @@ pub async fn get_authenticated_client() -> (rinda_sdk::Client, Credentials) {
         Err(e) => {
             let err_str = format!("{e}");
             if err_str.contains("401") || err_str.contains("status code 401") {
-                eprintln!("Session expired. Run: rinda auth login");
+                eprintln!("Session expired. Get a new token at: rinda auth url");
             } else if err_str.contains("connect") || err_str.contains("timeout") {
                 eprintln!("Cannot reach RINDA API. Check your connection.");
             } else {
