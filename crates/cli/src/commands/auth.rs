@@ -16,10 +16,12 @@ pub struct AuthArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum AuthCommands {
-    /// Log in. Provide a token from https://alpha.rinda.ai/cli-auth, or omit to open browser.
-    Login {
-        /// Bearer token from https://alpha.rinda.ai/cli-auth (optional)
-        token: Option<String>,
+    /// Print the URL to obtain an auth token
+    Url,
+    /// Log in with a refresh token from the auth URL
+    Token {
+        /// Refresh token from https://alpha.rinda.ai/cli-auth
+        token: String,
     },
     /// Check authentication status
     Status,
@@ -62,15 +64,65 @@ fn extract_jwt_claims(token: &str) -> (String, String, String) {
 
 pub async fn run(args: AuthArgs) {
     match args.command {
-        AuthCommands::Login { token: Some(token) } => {
-            // Token-based login: decode JWT claims and store credentials.
-            let (email, workspace_id, user_id) = extract_jwt_claims(&token);
-            let expires_at = extract_exp_from_jwt(&token);
+        AuthCommands::Url => {
+            println!("https://alpha.rinda.ai/cli-auth");
+        }
+
+        AuthCommands::Token { token: refresh_token } => {
+            // Exchange refresh token for an access token.
+            let client = oauth::sdk_client(None);
+            let mut body = serde_json::Map::new();
+            body.insert(
+                "refreshToken".to_string(),
+                serde_json::Value::String(refresh_token.clone()),
+            );
+
+            let resp = match client.post_api_v1_auth_refresh(&body).await {
+                Ok(r) => r.into_inner(),
+                Err(e) => {
+                    eprintln!("Invalid or expired token: {e}");
+                    process::exit(1);
+                }
+            };
+
+            let access_token = match resp.get("token").and_then(|v| v.as_str()) {
+                Some(t) => t.to_string(),
+                None => {
+                    eprintln!("No access token in refresh response");
+                    process::exit(1);
+                }
+            };
+
+            let new_refresh_token = resp
+                .get("refreshToken")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or(refresh_token);
+
+            let (email, _, user_id) = extract_jwt_claims(&access_token);
+            let expires_at = extract_exp_from_jwt(&access_token);
+
+            // Fetch workspace ID from the API.
+            let authed_client = oauth::sdk_client(Some(&access_token));
+            let workspace_id = match authed_client.get_api_v1_workspaces_user().await {
+                Ok(resp) => {
+                    let body = resp.into_inner();
+                    body.get("data")
+                        .and_then(|d| d.as_array())
+                        .and_then(|arr| arr.first())
+                        .and_then(|ws| ws.get("id"))
+                        .and_then(|id| id.as_str())
+                        .unwrap_or_default()
+                        .to_string()
+                }
+                Err(_) => String::new(),
+            };
+
             let creds = Credentials {
-                access_token: token,
-                refresh_token: String::new(),
+                access_token,
+                refresh_token: new_refresh_token,
                 expires_at,
-                workspace_id,
+                workspace_id: workspace_id.clone(),
                 user_id,
                 email: email.clone(),
             };
@@ -83,19 +135,14 @@ pub async fn run(args: AuthArgs) {
             } else {
                 println!("Logged in as {email}");
             }
-        }
-
-        AuthCommands::Login { token: None } => {
-            // No token provided: instruct user to visit cli-auth URL.
-            println!("Visit the following URL to obtain your token:");
-            println!("  https://alpha.rinda.ai/cli-auth");
-            println!();
-            println!("Then run: rinda auth login <token>");
+            if !workspace_id.is_empty() {
+                println!("Workspace: {workspace_id}");
+            }
         }
 
         AuthCommands::Status => {
             if !Credentials::exists() {
-                println!("Not logged in. Run: rinda auth login");
+                println!("Not logged in. Run: rinda auth url");
                 return;
             }
             match Credentials::load() {
@@ -152,7 +199,7 @@ async fn ensure_valid() {
     let creds = match load_credentials() {
         Ok(c) => c,
         Err(credentials::CredError::NotLoggedIn) => {
-            eprintln!("Not logged in. Run: rinda auth login");
+            eprintln!("Not logged in. Run: rinda auth url");
             process::exit(1);
         }
         Err(e) => {
@@ -166,7 +213,13 @@ async fn ensure_valid() {
         process::exit(0);
     }
 
-    // Token is expired or expiring soon — attempt a refresh.
+    // No refresh token — can't refresh.
+    if creds.refresh_token.is_empty() {
+        eprintln!("Session expired. Get a new token at: rinda auth url");
+        process::exit(1);
+    }
+
+    // Attempt a refresh.
     let client = oauth::sdk_client(None);
     let mut body = serde_json::Map::new();
     body.insert(
@@ -180,7 +233,7 @@ async fn ensure_valid() {
             let new_token = match resp.get("token").and_then(|v| v.as_str()) {
                 Some(t) => t.to_string(),
                 None => {
-                    eprintln!("Session expired. Run: rinda auth login");
+                    eprintln!("Session expired. Run: rinda auth url");
                     process::exit(1);
                 }
             };
@@ -210,7 +263,7 @@ async fn ensure_valid() {
         Err(e) => {
             let err_str = format!("{e}");
             if err_str.contains("401") || err_str.contains("status code 401") {
-                eprintln!("Session expired. Run: rinda auth login");
+                eprintln!("Session expired. Run: rinda auth url");
                 process::exit(1);
             }
             if err_str.contains("connect") || err_str.contains("timeout") {
@@ -271,7 +324,7 @@ mod tests {
         assert_eq!(user_id, "");
     }
 
-    /// Acceptance criteria: `rinda auth login <token>` should decode the JWT and
+    /// Acceptance criteria: `rinda auth url <token>` should decode the JWT and
     /// extract user info — this test verifies the claim-extraction logic that drives
     /// the token-based login flow described in issue #40.
     #[test]
