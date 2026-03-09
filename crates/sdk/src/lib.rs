@@ -26,7 +26,8 @@ mod tests {
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .unwrap();
-        let client = Client::new_with_client("https://alpha.rinda.ai/api/v1", reqwest_client);
+        let client =
+            Client::new_with_client("https://alpha.rinda.ai/api/v1", reqwest_client);
         assert_eq!(client.baseurl(), "https://alpha.rinda.ai/api/v1");
     }
 
