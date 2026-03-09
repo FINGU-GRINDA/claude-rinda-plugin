@@ -1391,6 +1391,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "base64",
+ "chrono",
  "clap",
  "dirs",
  "fs2",
@@ -1403,6 +1404,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "urlencoding",
+ "uuid",
 ]
 
 [[package]]
