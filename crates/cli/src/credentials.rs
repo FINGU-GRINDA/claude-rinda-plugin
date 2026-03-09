@@ -8,8 +8,8 @@ use base64::Engine;
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
-use rinda_common::config::{credentials_path, rinda_config_dir};
-use rinda_common::error::{Result, RindaError};
+use crate::config::{credentials_path, rinda_config_dir};
+use crate::error::{Result, RindaError};
 
 /// Credentials stored in ~/.rinda/credentials.json.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,7 +73,7 @@ impl Credentials {
 /// Error type for credential operations used by ensure-valid flow.
 #[derive(Debug, thiserror::Error)]
 pub enum CredError {
-    #[error("Not logged in. Run: rinda-cli auth login")]
+    #[error("Not logged in. Run: rinda auth login")]
     NotLoggedIn,
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
