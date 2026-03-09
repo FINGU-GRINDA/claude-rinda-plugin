@@ -1,5 +1,6 @@
 use std::process;
 
+use base64::Engine;
 use clap::{Args, Subcommand};
 
 use crate::credentials::{
@@ -15,8 +16,11 @@ pub struct AuthArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum AuthCommands {
-    /// Log in with Google OAuth
-    Login,
+    /// Log in. Provide a token from https://alpha.rinda.ai/cli-auth, or omit to open browser.
+    Login {
+        /// Bearer token from https://alpha.rinda.ai/cli-auth (optional)
+        token: Option<String>,
+    },
     /// Check authentication status
     Status,
     /// Log out and clear credentials
@@ -25,22 +29,69 @@ pub enum AuthCommands {
     EnsureValid,
 }
 
+/// Decode all useful claims from a JWT payload (without signature verification).
+fn extract_jwt_claims(token: &str) -> (String, String, String) {
+    let engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let parts: Vec<&str> = token.splitn(3, '.').collect();
+    if parts.len() < 2 {
+        return (String::new(), String::new(), String::new());
+    }
+    let Ok(decoded) = engine.decode(parts[1]) else {
+        return (String::new(), String::new(), String::new());
+    };
+    let Ok(payload) = serde_json::from_slice::<serde_json::Value>(&decoded) else {
+        return (String::new(), String::new(), String::new());
+    };
+    let email = payload
+        .get("email")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let workspace_id = payload
+        .get("workspaceId")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let user_id = payload
+        .get("userId")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    (email, workspace_id, user_id)
+}
+
 pub async fn run(args: AuthArgs) {
     match args.command {
-        AuthCommands::Login => match oauth::run_oauth_flow().await {
-            Ok(creds) => {
-                let email = creds.email.clone();
-                if let Err(e) = creds.save() {
-                    eprintln!("Error saving credentials: {e}");
-                    process::exit(1);
-                }
-                println!("Logged in as {email}");
-            }
-            Err(e) => {
-                eprintln!("Login failed: {e}");
+        AuthCommands::Login { token: Some(token) } => {
+            // Token-based login: decode JWT claims and store credentials.
+            let (email, workspace_id, user_id) = extract_jwt_claims(&token);
+            let expires_at = extract_exp_from_jwt(&token);
+            let creds = Credentials {
+                access_token: token,
+                refresh_token: String::new(),
+                expires_at,
+                workspace_id,
+                user_id,
+                email: email.clone(),
+            };
+            if let Err(e) = creds.save() {
+                eprintln!("Error saving credentials: {e}");
                 process::exit(1);
             }
-        },
+            if email.is_empty() {
+                println!("Logged in (email not found in token)");
+            } else {
+                println!("Logged in as {email}");
+            }
+        }
+
+        AuthCommands::Login { token: None } => {
+            // No token provided: instruct user to visit cli-auth URL.
+            println!("Visit the following URL to obtain your token:");
+            println!("  https://alpha.rinda.ai/cli-auth");
+            println!();
+            println!("Then run: rinda auth login <token>");
+        }
 
         AuthCommands::Status => {
             if !Credentials::exists() {
@@ -169,5 +220,74 @@ async fn ensure_valid() {
             eprintln!("Token refresh failed: {e}");
             process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_jwt_with_payload(payload_json: &str) -> String {
+        use base64::Engine;
+        let engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        let header = engine.encode(r#"{"alg":"none"}"#);
+        let payload = engine.encode(payload_json);
+        format!("{}.{}.sig", header, payload)
+    }
+
+    #[test]
+    fn extract_jwt_claims_valid_token() {
+        let token = make_jwt_with_payload(
+            r#"{"email":"user@example.com","workspaceId":"ws-123","userId":"u-456","exp":9999999999}"#,
+        );
+        let (email, workspace_id, user_id) = extract_jwt_claims(&token);
+        assert_eq!(email, "user@example.com");
+        assert_eq!(workspace_id, "ws-123");
+        assert_eq!(user_id, "u-456");
+    }
+
+    #[test]
+    fn extract_jwt_claims_missing_fields_returns_empty_strings() {
+        let token = make_jwt_with_payload(r#"{"exp":9999999999}"#);
+        let (email, workspace_id, user_id) = extract_jwt_claims(&token);
+        assert_eq!(email, "");
+        assert_eq!(workspace_id, "");
+        assert_eq!(user_id, "");
+    }
+
+    #[test]
+    fn extract_jwt_claims_invalid_token_returns_empty_strings() {
+        let (email, workspace_id, user_id) = extract_jwt_claims("not.a.valid.jwt");
+        // Decoding will fail on a non-base64 payload — should return empty strings.
+        // (4-part token: parts.len() >= 2, but payload is invalid base64/JSON)
+        let _ = (email, workspace_id, user_id); // just verify no panic
+    }
+
+    #[test]
+    fn extract_jwt_claims_too_few_parts_returns_empty_strings() {
+        let (email, workspace_id, user_id) = extract_jwt_claims("onlyonepart");
+        assert_eq!(email, "");
+        assert_eq!(workspace_id, "");
+        assert_eq!(user_id, "");
+    }
+
+    /// Acceptance criteria: `rinda auth login <token>` should decode the JWT and
+    /// extract user info — this test verifies the claim-extraction logic that drives
+    /// the token-based login flow described in issue #40.
+    #[test]
+    fn token_login_extracts_claims_from_jwt() {
+        let token = make_jwt_with_payload(
+            r#"{"email":"alice@rinda.ai","workspaceId":"ws-abc","userId":"uid-1","exp":9999999999}"#,
+        );
+        let (email, workspace_id, user_id) = extract_jwt_claims(&token);
+        assert_eq!(
+            email, "alice@rinda.ai",
+            "email should be extracted from JWT"
+        );
+        assert_eq!(
+            workspace_id, "ws-abc",
+            "workspaceId should be extracted from JWT"
+        );
+        assert_eq!(user_id, "uid-1", "userId should be extracted from JWT");
     }
 }

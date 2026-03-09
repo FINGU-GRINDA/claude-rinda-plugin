@@ -23,6 +23,8 @@ fs2 = "0.4"
 base64 = "0.22"
 urlencoding = "2"
 dirs = "6"
+uuid = { version = "1", features = ["serde"] }
+chrono = "0.4"
 
 [dev-dependencies]
 tempfile = "3"

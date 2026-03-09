@@ -37,6 +37,7 @@ pub fn sdk_client(bearer_token: Option<&str>) -> rinda_sdk::Client {
 }
 
 /// Run the full OAuth flow: open browser, wait for callback, exchange code, fetch profile.
+#[allow(dead_code)]
 pub async fn run_oauth_flow() -> Result<Credentials> {
     // Channel to receive the OAuth code from the callback handler.
     let (tx, rx) = oneshot::channel::<String>();
