@@ -1,0 +1,23 @@
+[package]
+name = "rinda-sdk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+build = "build.rs"
+
+[dependencies]
+chrono = { version = "0.4.44", features = ["serde"] }
+progenitor-client = "0.13"
+regress = "0.10.5"
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { version = "1.22.0", features = ["serde", "v4"] }
+
+[build-dependencies]
+openapiv3 = "2.2.0"
+prettyplease = "0.2.37"
+progenitor = "0.13"
+serde_json = "1"
+syn = "2.0.117"

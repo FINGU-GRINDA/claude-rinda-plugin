@@ -1,8 +1,6 @@
-use std::collections::HashMap;
 use std::process;
 
 use clap::{Args, Subcommand};
-use rinda_sdk::apis::default_api;
 
 use crate::credentials::{
     self, Credentials, extract_exp_from_jwt, is_token_valid, load_credentials, save_credentials,
@@ -118,15 +116,16 @@ async fn ensure_valid() {
     }
 
     // Token is expired or expiring soon — attempt a refresh.
-    let config = oauth::sdk_config(None);
-    let mut body = HashMap::new();
+    let client = oauth::sdk_client(None);
+    let mut body = serde_json::Map::new();
     body.insert(
         "refreshToken".to_string(),
         serde_json::Value::String(creds.refresh_token.clone()),
     );
 
-    match default_api::post_api_v1_auth_refresh(&config, body).await {
+    match client.post_api_v1_auth_refresh(&body).await {
         Ok(resp) => {
+            let resp = resp.into_inner();
             let new_token = match resp.get("token").and_then(|v| v.as_str()) {
                 Some(t) => t.to_string(),
                 None => {
