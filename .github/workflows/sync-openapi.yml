@@ -1,0 +1,65 @@
+name: Sync OpenAPI spec
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # Daily at 06:00 UTC
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for new release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST_TAG=$(gh release view --repo FINGU-GRINDA/send-grid-test --json tagName -q .tagName)
+          echo "Latest release: $LATEST_TAG"
+
+          CURRENT_TAG=""
+          if [ -f doc/.openapi-version ]; then
+            CURRENT_TAG=$(cat doc/.openapi-version)
+          fi
+          echo "Current version: $CURRENT_TAG"
+
+          if [ "$LATEST_TAG" = "$CURRENT_TAG" ]; then
+            echo "Already on latest version — skipping."
+            echo "SKIP=true" >> "$GITHUB_ENV"
+          else
+            echo "SKIP=false" >> "$GITHUB_ENV"
+          fi
+
+          echo "LATEST_TAG=$LATEST_TAG" >> "$GITHUB_ENV"
+
+      - name: Download and commit openapi.json
+        if: env.SKIP == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "$LATEST_TAG" \
+            --repo FINGU-GRINDA/send-grid-test \
+            --pattern "openapi.json" \
+            --dir /tmp/openapi \
+            --clobber
+
+          VERSION="${LATEST_TAG#v}"
+          echo "Syncing version: $VERSION"
+
+          # Update openapi spec
+          cp /tmp/openapi/openapi.json doc/openapi.json
+          echo "$LATEST_TAG" > doc/.openapi-version
+
+          # Update plugin version to match openapi release
+          jq --arg v "$VERSION" '.version = $v' .claude-plugin/plugin.json > /tmp/plugin.json
+          mv /tmp/plugin.json .claude-plugin/plugin.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add doc/openapi.json doc/.openapi-version .claude-plugin/plugin.json
+          git commit -m "chore(sdk): sync openapi.json and bump plugin version to $VERSION"
+          git push
