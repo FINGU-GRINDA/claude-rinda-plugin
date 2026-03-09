@@ -4,25 +4,22 @@
 
 ---
 
-## Flow 0: Authentication (CLI Token)
+## Flow 0: Authentication (Token)
 
-**CLI Method**: `get_auth_token`
-
-**Parameters**: none (interactive — opens browser)
+**How it works**: User visits `https://alpha.rinda.ai/cli-auth` directly in their browser (not via CLI).
 
 **Steps**:
-1. Call `GET https://alpha.rinda.ai/cli-auth` — initiates auth flow (browser-based)
-2. User authenticates in browser (Google OAuth or credentials)
-3. Server returns a token to the CLI callback
-4. Store token locally at `~/.rinda/credentials.json`
-5. All subsequent API calls use `Authorization: Bearer <token>`
-
-**API endpoint**: `GET https://alpha.rinda.ai/cli-auth` (frontend, not API backend)
+1. User opens `https://alpha.rinda.ai/cli-auth` in browser
+2. User authenticates (Google OAuth or credentials)
+3. Frontend displays a token for the user to copy
+4. User provides the token to the CLI (e.g. `rinda login <token>` or config file)
+5. CLI stores token at `~/.rinda/credentials.json`
+6. All subsequent API calls use `Authorization: Bearer <token>`
 
 **Token lifecycle**:
 - Stored in `~/.rinda/credentials.json`
 - Attached to every request as `Bearer` header
-- CLI checks token validity before each call; re-auth if expired
+- CLI checks token validity before each call; prompts re-auth if expired
 
 ---
 
@@ -163,7 +160,7 @@
 
 | # | MCP Tool | REST Endpoint | CLI Method |
 |---|----------|---------------|------------|
-| 0 | — | `GET {FRONTEND}/cli-auth` | `get_auth_token` |
+| 0 | — | User visits frontend `/cli-auth` | `login` (stores token) |
 | 1 | `rinda_buyer_search` | `POST /buyers/search` | TBD |
 | 2 | `rinda_buyer_enrich` | `GET /buyers/{id}/enrich` | TBD |
 | 3 | `rinda_sequence_create` | `POST /sequences` | TBD |
@@ -191,5 +188,5 @@ These are not separate API calls but logic the plugin orchestrates:
 ## Open Questions
 
 1. **Endpoint mapping**: The dev guide uses idealized paths (`/buyers/search`, `/sequences`, etc.). Need to map these to actual alpha API endpoints from the OpenAPI spec.
-2. **Auth**: Token-based via `https://alpha.rinda.ai/cli-auth` (frontend). ✅ Confirmed.
+2. **Auth**: Token-based. User gets token from `https://alpha.rinda.ai/cli-auth` (frontend, direct browser access). CLI stores and uses it. ✅ Confirmed.
 3. **MCP vs CLI**: Dev guide describes an MCP server wrapping REST. Our plugin uses a Rust CLI instead. The flows are the same but the transport differs.
