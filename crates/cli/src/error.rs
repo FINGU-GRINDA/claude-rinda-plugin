@@ -15,6 +15,7 @@ pub enum RindaError {
     Auth(String),
 
     #[error("API error: {0}")]
+    #[allow(dead_code)]
     Api(String),
 }
 
