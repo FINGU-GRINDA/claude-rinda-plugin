@@ -73,7 +73,7 @@ impl Credentials {
 /// Error type for credential operations used by ensure-valid flow.
 #[derive(Debug, thiserror::Error)]
 pub enum CredError {
-    #[error("Not logged in. Run: rinda auth login")]
+    #[error("Not logged in. Run: rinda auth url")]
     NotLoggedIn,
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
@@ -97,6 +97,9 @@ pub fn load_credentials_from(path: &Path) -> CredResult<Credentials> {
         .open(&lock_path)
     {
         Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(CredError::NotLoggedIn);
+        }
         Err(e) => return Err(CredError::Io(e)),
     };
     lock_file.lock_shared()?;
