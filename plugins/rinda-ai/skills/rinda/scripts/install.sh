@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
 # Download the rinda-cli binary from GitHub Releases.
-# Detects OS/arch and fetches the version pinned in .release-please-manifest.json.
+# Detects OS/arch and fetches the version pinned in plugin.json.
 set -euo pipefail
 
 REPO="FINGU-GRINDA/claude-rinda-plugin"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Find .release-please-manifest.json by walking up from script location.
-find_manifest() {
+# Find plugin.json by walking up from script location.
+find_plugin_json() {
   local dir="$SCRIPT_DIR"
   while [ "$dir" != "/" ]; do
-    [ -f "$dir/.release-please-manifest.json" ] && echo "$dir/.release-please-manifest.json" && return
+    [ -f "$dir/.claude-plugin/plugin.json" ] && echo "$dir/.claude-plugin/plugin.json" && return
     dir="$(dirname "$dir")"
   done
   return 1
 }
 
-MANIFEST=$(find_manifest) || { echo "error: .release-please-manifest.json not found" >&2; exit 1; }
+PLUGIN_JSON=$(find_plugin_json) || { echo "error: .claude-plugin/plugin.json not found" >&2; exit 1; }
 INSTALL_DIR="$HOME/.rinda/bin"
 mkdir -p "$INSTALL_DIR"
 BINARY="$INSTALL_DIR/rinda-cli"
 
-# Read pinned version from manifest.
+# Read pinned version from plugin.json.
 
-VERSION=$(python3 -c "import json; print(json.load(open('$MANIFEST'))['.'])" 2>/dev/null \
-  || node -e "console.log(JSON.parse(require('fs').readFileSync('$MANIFEST','utf8'))['.'])" 2>/dev/null)
+VERSION=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON'))['version'])" 2>/dev/null \
+  || node -e "console.log(JSON.parse(require('fs').readFileSync('$PLUGIN_JSON','utf8')).version)" 2>/dev/null)
 
 if [ -z "$VERSION" ]; then
   echo "error: could not read version from manifest" >&2
