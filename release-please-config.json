@@ -7,7 +7,22 @@
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "extra-files": [
-        "bin/install.sh"
+        "bin/install.sh",
+        {
+          "type": "json",
+          "path": "../../.claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "../../.claude-plugin/marketplace.json",
+          "jsonpath": "$.plugins[0].version"
+        },
+        {
+          "type": "json",
+          "path": "../../plugins/rinda-ai/.claude-plugin/plugin.json",
+          "jsonpath": "$.version"
+        }
       ]
     }
   },
