@@ -87,7 +87,13 @@ pub async fn run(args: AuthArgs) {
                 }
             };
 
-            let access_token = match resp.get("token").and_then(|v| v.as_str()) {
+            // The API wraps the payload in a `data` envelope.
+            let data = resp
+                .get("data")
+                .and_then(|v| v.as_object())
+                .unwrap_or(&resp);
+
+            let access_token = match data.get("token").and_then(|v| v.as_str()) {
                 Some(t) => t.to_string(),
                 None => {
                     eprintln!("No access token in refresh response");
@@ -95,7 +101,7 @@ pub async fn run(args: AuthArgs) {
                 }
             };
 
-            let new_refresh_token = resp
+            let new_refresh_token = data
                 .get("refreshToken")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
@@ -232,14 +238,18 @@ async fn ensure_valid() {
     match client.post_api_v1_auth_refresh(&body).await {
         Ok(resp) => {
             let resp = resp.into_inner();
-            let new_token = match resp.get("token").and_then(|v| v.as_str()) {
+            let data = resp
+                .get("data")
+                .and_then(|v| v.as_object())
+                .unwrap_or(&resp);
+            let new_token = match data.get("token").and_then(|v| v.as_str()) {
                 Some(t) => t.to_string(),
                 None => {
                     eprintln!("Session expired. Run: rinda auth url");
                     process::exit(1);
                 }
             };
-            let new_refresh_token = resp
+            let new_refresh_token = data
                 .get("refreshToken")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
