@@ -35,11 +35,9 @@ pub async fn get_authenticated_client() -> (rinda_sdk::Client, Credentials) {
 
     // Attempt a refresh.
     let refresh_client = oauth::sdk_client(None);
-    let mut body = serde_json::Map::new();
-    body.insert(
-        "refreshToken".to_string(),
-        serde_json::Value::String(creds.refresh_token.clone()),
-    );
+    let body = rinda_sdk::types::PostApiV1AuthRefreshBody {
+        refresh_token: creds.refresh_token.clone(),
+    };
 
     match refresh_client.post_api_v1_auth_refresh(&body).await {
         Ok(resp) => {
@@ -91,6 +89,43 @@ pub async fn get_authenticated_client() -> (rinda_sdk::Client, Credentials) {
             process::exit(1);
         }
     }
+}
+
+/// Parse the workspace_id from credentials as a UUID.
+/// Exits with a clear error if the workspace_id is empty or invalid.
+pub fn require_workspace_id(creds: &crate::credentials::Credentials) -> uuid::Uuid {
+    if creds.workspace_id.is_empty() {
+        eprintln!(
+            "No workspace ID in credentials. This account may not have a workspace on this environment."
+        );
+        eprintln!(
+            "Try logging in again or switching environments with: rinda config set --env <alpha|beta>"
+        );
+        process::exit(1);
+    }
+    creds
+        .workspace_id
+        .parse::<uuid::Uuid>()
+        .unwrap_or_else(|_| {
+            eprintln!(
+                "Invalid workspace ID in credentials: {}",
+                creds.workspace_id
+            );
+            process::exit(1);
+        })
+}
+
+/// Parse the user_id from credentials as a UUID.
+/// Exits with a clear error if invalid.
+pub fn require_user_id(creds: &crate::credentials::Credentials) -> uuid::Uuid {
+    if creds.user_id.is_empty() {
+        eprintln!("No user ID in credentials. Try logging in again.");
+        process::exit(1);
+    }
+    creds.user_id.parse::<uuid::Uuid>().unwrap_or_else(|_| {
+        eprintln!("Invalid user ID in credentials: {}", creds.user_id);
+        process::exit(1);
+    })
 }
 
 /// Pretty-print a JSON map to stdout.

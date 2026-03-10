@@ -11,7 +11,7 @@ use axum::routing::get;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-use crate::config::BASE_URL;
+use crate::config::base_url;
 use crate::credentials::Credentials;
 use crate::error::{Result, RindaError};
 
@@ -30,9 +30,9 @@ pub fn sdk_client(bearer_token: Option<&str>) -> rinda_sdk::Client {
             .default_headers(headers)
             .build()
             .expect("Failed to build reqwest client");
-        rinda_sdk::Client::new_with_client(BASE_URL, reqwest_client)
+        rinda_sdk::Client::new_with_client(base_url(), reqwest_client)
     } else {
-        rinda_sdk::Client::new(BASE_URL)
+        rinda_sdk::Client::new(base_url())
     }
 }
 
@@ -73,7 +73,8 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
 
     // Build the Google auth URL.
     let google_url = format!(
-        "{BASE_URL}/api/v1/auth/google?redirect_uri={}",
+        "{}/api/v1/auth/google?redirect_uri={}",
+        base_url(),
         urlencoding::encode("http://localhost:9876/callback")
     );
 
@@ -103,8 +104,21 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
     .map_err(|_| RindaError::Auth("Timed out waiting for OAuth callback (120 s). Please try again.".into()))??;
 
     // Exchange the code for tokens.
-    let mut body = serde_json::Map::new();
-    body.insert("code".to_string(), serde_json::Value::String(code));
+    let body = rinda_sdk::types::PostApiV1AuthGoogleCallbackBody {
+        code,
+        country: None,
+        experience: None,
+        industry: None,
+        invite_code: None,
+        lang: None,
+        marketing_email_consented: None,
+        state: None,
+        target: None,
+        turnstile_token: None,
+        utm_campaign: None,
+        utm_medium: None,
+        utm_source: None,
+    };
 
     let client = sdk_client(None);
     let callback_resp = client
