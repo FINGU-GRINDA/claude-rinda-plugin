@@ -83,3 +83,34 @@ fi
 
 chmod +x "$BINARY"
 echo "Installed rinda-cli v${VERSION} to $BINARY"
+
+# ── Download rinda-mcp binary ─────────────────────────────────────────────────
+
+MCP_BINARY="$INSTALL_DIR/rinda-mcp"
+
+# Skip download if correct version already exists.
+if [ -x "$MCP_BINARY" ]; then
+  MCP_CURRENT=$("$MCP_BINARY" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+  if [ "$MCP_CURRENT" = "$VERSION" ]; then
+    exit 0
+  fi
+  rm -f "$MCP_BINARY"
+fi
+
+# Reuse OS/arch artifact base detected above, swap rinda-cli -> rinda-mcp.
+MCP_ARTIFACT="${ARTIFACT/rinda-cli/rinda-mcp}"
+
+MCP_URL="https://github.com/${REPO}/releases/download/${TAG}/${MCP_ARTIFACT}"
+
+echo "Downloading rinda-mcp v${VERSION} for ${OS}/${ARCH}..."
+if command -v curl >/dev/null 2>&1; then
+  curl -fSL --retry 3 -o "$MCP_BINARY" "$MCP_URL"
+elif command -v wget >/dev/null 2>&1; then
+  wget -q -O "$MCP_BINARY" "$MCP_URL"
+else
+  echo "error: curl or wget required" >&2
+  exit 1
+fi
+
+chmod +x "$MCP_BINARY"
+echo "Installed rinda-mcp v${VERSION} to $MCP_BINARY"
