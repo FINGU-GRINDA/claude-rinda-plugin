@@ -1,6 +1,6 @@
 # RINDA Cowork Plugin Architecture
 
-> Claude Cowork plugin for RINDA AI. Uses a lightweight CLI for OAuth/token management. Claude calls the REST API directly — no MCP server needed.
+> Claude Cowork plugin for RINDA AI. Uses a lightweight CLI for OAuth/token management and an MCP server for structured tool calls. Supports both CLI mode (shell-based workflows) and MCP mode (structured tool interface auto-discovered by Claude Code).
 
 ---
 
@@ -29,6 +29,12 @@
 |                   |                reads  |
 |                   |-----------------------+
 |                   |
+|                   |  MCP (stdio)  +----------------+
+|                   |<------------->| rinda-mcp      |
+|                   |               | (auto-started  |
+|                   |               |  by plugin.json)|
+|                   |               +-------+--------+
+|                   |                       |
 |                   |    REST (with valid accessToken)
 |                   |-------------------------------------->  Elysia Backend
 |                   |              HTTPS                     api.rinda.ai
@@ -42,7 +48,13 @@
 |  Component          | Responsibility                              |
 |------------------------------------------------------------------+
 |  rinda-cli          | OAuth login, token refresh, credential      |
-|  (~100 lines Bun)   | storage. Claude never sees auth logic.      |
+|                     | storage. Claude never sees auth logic.      |
+|                     |                                             |
+|  rinda-mcp          | MCP server binary providing structured      |
+|                     | tool interface. Claude Code auto-discovers  |
+|                     | it via plugin.json mcpServers config.       |
+|                     | Communicates over stdio, calls REST API     |
+|                     | using same credentials as CLI.              |
 |                     |                                             |
 |  Plugin commands/   | Markdown files that teach Claude HOW to     |
 |  (5 .md files)      | call REST endpoints, what params to use,    |
@@ -92,17 +104,30 @@ rinda-ai/
 │   │   ├── Cargo.toml
 │   │   ├── build.rs              # Code generation via progenitor at build time
 │   │   └── src/lib.rs
-│   └── cli/                      # rinda-cli: CLI binary (name: "rinda")
+│   ├── cli/                      # rinda-cli: CLI binary (name: "rinda")
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── main.rs           # CLI entry (clap subcommands)
+│   │       ├── config.rs         # Paths and BASE_URL (inlined from former rinda-common)
+│   │       ├── error.rs          # RindaError enum (inlined from former rinda-common)
+│   │       ├── credentials.rs    # Read/write ~/.rinda/credentials.json
+│   │       ├── oauth.rs          # Google OAuth flow (localhost callback)
+│   │       └── commands/
+│   │           ├── auth.rs       # auth login/logout/status/ensure-valid
+│   │           └── config.rs     # config show
+│   └── mcp-server/               # rinda-mcp: MCP server binary (stdio transport)
 │       ├── Cargo.toml
 │       └── src/
-│           ├── main.rs           # CLI entry (clap subcommands)
-│           ├── config.rs         # Paths and BASE_URL (inlined from former rinda-common)
-│           ├── error.rs          # RindaError enum (inlined from former rinda-common)
-│           ├── credentials.rs    # Read/write ~/.rinda/credentials.json
-│           ├── oauth.rs          # Google OAuth flow (localhost callback)
-│           └── commands/
-│               ├── auth.rs       # auth login/logout/status/ensure-valid
-│               └── config.rs     # config show
+│           ├── main.rs           # MCP server entry point
+│           ├── auth.rs           # Credential loading (reads ~/.rinda/credentials.json)
+│           └── tools/
+│               ├── mod.rs        # Tool registration
+│               ├── auth.rs       # rinda_auth_status, rinda_auth_login
+│               ├── buyer.rs      # rinda_buyer_search/status/results/select/enrich/clarify
+│               ├── campaign.rs   # rinda_campaign_stats
+│               ├── email.rs      # rinda_email_send
+│               ├── reply.rs      # rinda_reply_check
+│               └── sequence.rs   # rinda_sequence_create/list/generate/add_contact
 └── doc/
     ├── openapi.json              # Raw OpenAPI spec (synced from upstream)
     └── openapi-patched.json      # Patched spec used for SDK generation
@@ -612,6 +637,74 @@ auth status:
 
 ---
 
+## MCP Server Architecture
+
+### Binary: `rinda-mcp`
+
+- **Transport**: stdio (JSON-RPC 2.0 over stdin/stdout)
+- **Launch**: Auto-started by Claude Code via `plugin.json` `mcpServers` config
+- **Auth**: Reads `~/.rinda/credentials.json` — same file as `rinda-cli`. No separate login needed.
+- **Install path**: `~/.rinda/bin/rinda-mcp` (installed alongside `rinda-cli` by `bin/install.sh`)
+
+### Available MCP Tools (15 total)
+
+| Tool | Description |
+|------|-------------|
+| `rinda_auth_status` | Return current authentication status |
+| `rinda_auth_login` | Return browser login URL and instructions |
+| `rinda_buyer_search` | Start an async buyer search, returns sessionId |
+| `rinda_buyer_status` | Poll status of an async search session |
+| `rinda_buyer_results` | Get results of a completed search session |
+| `rinda_buyer_select` | Save selected leads from a discovery session |
+| `rinda_buyer_enrich` | Enrich a buyer/lead with contact and company data |
+| `rinda_buyer_clarify` | Submit answers to clarification questions |
+| `rinda_campaign_stats` | Get campaign dashboard statistics |
+| `rinda_email_send` | Send an email via RINDA |
+| `rinda_reply_check` | Get recent email replies |
+| `rinda_sequence_create` | Create a new email sequence |
+| `rinda_sequence_list` | List existing email sequences |
+| `rinda_sequence_generate` | AI-generate email steps for a sequence |
+| `rinda_sequence_add_contact` | Enroll a lead into an email sequence |
+
+### Standalone Usage (Outside Claude Code Plugin)
+
+The `rinda-mcp` binary can be used with any MCP-compatible client (Claude Desktop, Cursor, etc.) without the full Claude Code plugin.
+
+**Step 1: Install**
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/FINGU-GRINDA/claude-rinda-plugin/main/bin/install.sh)
+```
+
+Or download the binary directly from [GitHub Releases](https://github.com/FINGU-GRINDA/claude-rinda-plugin/releases) and place it at `~/.rinda/bin/rinda-mcp`.
+
+**Step 2: Authenticate**
+
+```bash
+~/.rinda/bin/rinda-cli auth login
+```
+
+This creates `~/.rinda/credentials.json` which `rinda-mcp` reads automatically.
+
+**Step 3: Configure your MCP client**
+
+For Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "rinda": {
+      "command": "/Users/yourname/.rinda/bin/rinda-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+For other MCP clients, point `command` at `~/.rinda/bin/rinda-mcp` with no additional arguments.
+
+---
+
 ## Security
 
 ```
@@ -666,21 +759,29 @@ Total per session:                    ~1,000 tokens
 
 ---
 
-## Comparison: Why CLI + Plugin Over MCP Server
+## Two Operating Modes: CLI and MCP
+
+Both modes are supported and installed automatically. They share the same credentials file and REST API backend.
 
 ```
-                        MCP Server           CLI + Plugin
-                        ──────────           ────────────
-Infrastructure          ECS + ALB + Redis    $0 (runs locally)
-Auth handling           Server-side Redis    CLI + local file
-Context window          ~4,000 tok/session   ~1,000 tok/session
-Token rotation          Server manages       Hook + CLI manages
-Backend changes         None                 None
-Maintenance             Server monitoring    ~100 lines of Bun
-Deployment              Docker + AWS         npm publish
-Time to build           3-4 weeks            1 week
-Monthly cost            ~$30-50              $0
+                        CLI Mode             MCP Mode
+                        ────────             ────────
+Interface               Shell commands       Structured tool calls
+Claude interaction      Bash tool + output   Native MCP tool calls
+Auth handling           rinda-cli binary     rinda-mcp reads credentials.json
+Token refresh           rinda-cli hook       rinda-mcp reads valid token
+Startup                 Launched by hook     Launched by Claude Code (plugin.json)
+Transport               stdout text          stdio (JSON-RPC)
+Best for                Scripting, CI/CD     Conversational AI workflows
 ```
+
+### CLI Mode
+
+Claude calls `rinda-cli` subcommands via the Bash tool. The pre-tool-call hook ensures tokens are always fresh before any Bash invocation. Suitable for shell-based workflows and scripting.
+
+### MCP Mode
+
+Claude Code auto-discovers `rinda-mcp` from `plugin.json`'s `mcpServers` config and launches it on session start. Claude calls the 15 MCP tools directly without shell commands. Suitable for structured, conversational workflows where Claude manages the full loop.
 
 ---
 
