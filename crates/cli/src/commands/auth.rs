@@ -65,7 +65,7 @@ fn extract_jwt_claims(token: &str) -> (String, String, String) {
 pub async fn run(args: AuthArgs) {
     match args.command {
         AuthCommands::Url => {
-            println!("https://alpha.rinda.ai/cli-auth");
+            println!("https://app.rinda.ai/cli-auth");
         }
 
         AuthCommands::Token {

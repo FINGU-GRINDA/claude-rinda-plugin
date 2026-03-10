@@ -11,4 +11,4 @@ pub fn credentials_path() -> Option<PathBuf> {
 }
 
 /// Base URL for the Rinda API (host only, no path prefix).
-pub const BASE_URL: &str = "https://alpha.rinda.ai";
+pub const BASE_URL: &str = "https://app.rinda.ai";
