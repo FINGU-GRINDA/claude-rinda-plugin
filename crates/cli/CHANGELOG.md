@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-cli-v0.1.2...rinda-cli-v0.1.3) (2026-03-10)
+
+
+### Bug Fixes
+
+* **cli:** fix duplicate variable in ensure-valid error handling ([#53](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/53)) ([b9b8f7b](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/b9b8f7b55ebcb44cd20b65c45ca2392a0f003499))
+
 ## [0.1.2](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-cli-v0.1.1...rinda-cli-v0.1.2) (2026-03-10)
 
 
