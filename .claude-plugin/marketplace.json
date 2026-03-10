@@ -1,0 +1,19 @@
+{
+  "name": "claude-rinda-plugin",
+  "description": "RINDA AI marketplace - B2B export sales automation plugins for Claude Code",
+  "owner": {
+    "name": "GRINDA AI"
+  },
+  "plugins": [
+    {
+      "name": "rinda-ai",
+      "description": "B2B export sales automation - buyer search, enrichment, email sequences, reply management",
+      "version": "1.0.0",
+      "author": {
+        "name": "GRINDA AI"
+      },
+      "source": "./plugins/rinda-ai",
+      "category": "sales"
+    }
+  ]
+}
