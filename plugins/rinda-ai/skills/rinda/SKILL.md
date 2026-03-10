@@ -80,6 +80,22 @@ rinda-cli buyer select --session-id "uuid" --recommendation-id "rec_id"
 
 Save selected leads from discovery results into the workspace.
 
+### Buyer Messages
+
+```bash
+rinda-cli buyer messages --session-id "uuid"
+```
+
+Retrieve clarification questions for a session in `waiting_clarification` status.
+
+### Buyer Clarify
+
+```bash
+rinda-cli buyer clarify --session-id "uuid" --answers '{"field": "value"}'
+```
+
+Submit answers to clarification questions and resume the search session.
+
 ### Buyer Enrich
 
 ```bash
@@ -152,7 +168,9 @@ rinda-cli order history --buyer-id "search term" --days-inactive 30
 
 1. `rinda-cli auth ensure-valid`
 2. `rinda-cli buyer search --industry "X" --countries "Y" --limit 50` → get `sessionId`
-3. Poll: `rinda-cli buyer status --session-id "ID"` until `status: complete`
+3. Poll: `rinda-cli buyer status --session-id "ID"`
+   - If `waiting_clarification` → `rinda-cli buyer messages --session-id "ID"` → present questions to user → `rinda-cli buyer clarify --session-id "ID" --answers '{...}'` → resume polling
+   - If `complete` → proceed to results
 4. `rinda-cli buyer results --session-id "ID"` → view discovered leads
 5. Score leads using **buyer-qualification** rules (see references)
 6. Present ranked table, offer: select? enrich? create sequence?
@@ -202,3 +220,4 @@ Carry forward IDs between steps. Always ask before proceeding to next.
 | 429 rate limit | Wait 30s, retry once |
 | 5xx | Wait 3s, retry once |
 | Empty results | Suggest broadening criteria |
+| waiting_clarification | Fetch messages, present to user, submit answers with `buyer clarify` |
