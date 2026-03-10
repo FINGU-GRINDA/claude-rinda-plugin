@@ -5,7 +5,10 @@
     "crates/cli": {
       "component": "rinda-cli",
       "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true
+      "bump-patch-for-minor-pre-major": true,
+      "extra-files": [
+        "bin/install.sh"
+      ]
     }
   },
   "separate-pull-requests": false
