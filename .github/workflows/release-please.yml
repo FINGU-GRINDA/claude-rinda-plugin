@@ -113,11 +113,17 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Bundle plugin as zip
+        run: cd plugins && zip -r "$GITHUB_WORKSPACE/artifacts/rinda-ai-plugin.zip" rinda-ai/
 
       - name: Upload binaries to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -134,3 +140,4 @@ jobs:
             artifacts/rinda-cli-macos-arm64.sha256
             artifacts/rinda-cli-windows-x64.exe
             artifacts/rinda-cli-windows-x64.exe.sha256
+            artifacts/rinda-ai-plugin.zip
