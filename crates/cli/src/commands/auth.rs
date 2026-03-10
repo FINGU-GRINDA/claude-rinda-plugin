@@ -68,7 +68,9 @@ pub async fn run(args: AuthArgs) {
             println!("https://alpha.rinda.ai/cli-auth");
         }
 
-        AuthCommands::Token { token: refresh_token } => {
+        AuthCommands::Token {
+            token: refresh_token,
+        } => {
             // Exchange refresh token for an access token.
             let client = oauth::sdk_client(None);
             let mut body = serde_json::Map::new();
