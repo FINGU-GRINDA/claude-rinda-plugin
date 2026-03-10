@@ -95,14 +95,24 @@ pub async fn get_authenticated_client() -> (rinda_sdk::Client, Credentials) {
 /// Exits with a clear error if the workspace_id is empty or invalid.
 pub fn require_workspace_id(creds: &crate::credentials::Credentials) -> uuid::Uuid {
     if creds.workspace_id.is_empty() {
-        eprintln!("No workspace ID in credentials. This account may not have a workspace on this environment.");
-        eprintln!("Try logging in again or switching environments with: rinda config set --env <alpha|beta>");
+        eprintln!(
+            "No workspace ID in credentials. This account may not have a workspace on this environment."
+        );
+        eprintln!(
+            "Try logging in again or switching environments with: rinda config set --env <alpha|beta>"
+        );
         process::exit(1);
     }
-    creds.workspace_id.parse::<uuid::Uuid>().unwrap_or_else(|_| {
-        eprintln!("Invalid workspace ID in credentials: {}", creds.workspace_id);
-        process::exit(1);
-    })
+    creds
+        .workspace_id
+        .parse::<uuid::Uuid>()
+        .unwrap_or_else(|_| {
+            eprintln!(
+                "Invalid workspace ID in credentials: {}",
+                creds.workspace_id
+            );
+            process::exit(1);
+        })
 }
 
 /// Parse the user_id from credentials as a UUID.

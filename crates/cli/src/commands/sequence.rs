@@ -5,7 +5,9 @@ use std::process;
 use clap::{Args, Subcommand};
 use uuid::Uuid;
 
-use crate::api_helper::{exit_api_error, get_authenticated_client, print_json, require_workspace_id};
+use crate::api_helper::{
+    exit_api_error, get_authenticated_client, print_json, require_workspace_id,
+};
 
 #[derive(Debug, Args)]
 pub struct SequenceArgs {
@@ -70,9 +72,8 @@ pub async fn run(args: SequenceArgs) {
             steps: _steps,
         } => {
             let workspace_id = require_workspace_id(&creds);
-            let name_typed: rinda_sdk::types::PostApiV1SequencesBodyName = name
-                .parse()
-                .unwrap_or_else(|e| {
+            let name_typed: rinda_sdk::types::PostApiV1SequencesBodyName =
+                name.parse().unwrap_or_else(|e| {
                     eprintln!("Invalid sequence name: {e}");
                     process::exit(1);
                 });

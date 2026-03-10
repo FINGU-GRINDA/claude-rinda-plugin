@@ -5,7 +5,9 @@ use std::process;
 use clap::{Args, Subcommand};
 use uuid::Uuid;
 
-use crate::api_helper::{exit_api_error, get_authenticated_client, print_json, require_workspace_id};
+use crate::api_helper::{
+    exit_api_error, get_authenticated_client, print_json, require_workspace_id,
+};
 
 #[derive(Debug, Args)]
 pub struct BuyerArgs {
@@ -136,18 +138,9 @@ pub async fn run(args: BuyerArgs) {
                             .and_then(|v| v.as_u64())
                             .map(|c| c.to_string())
                             .unwrap_or_else(|| "?".to_string());
-                        let query = s
-                            .get("query")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("-");
-                        let job_phase = s
-                            .get("jobPhase")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("-");
-                        let message = s
-                            .get("message")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("-");
+                        let query = s.get("query").and_then(|v| v.as_str()).unwrap_or("-");
+                        let job_phase = s.get("jobPhase").and_then(|v| v.as_str()).unwrap_or("-");
+                        let message = s.get("message").and_then(|v| v.as_str()).unwrap_or("-");
 
                         println!("Session: {session_id}");
                         println!("Query:    {query}");
