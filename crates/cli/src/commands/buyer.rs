@@ -71,6 +71,24 @@ pub enum BuyerCommands {
         #[arg(long)]
         buyer_id: String,
     },
+
+    /// Retrieve clarification questions for a session in waiting_clarification status
+    Messages {
+        /// Session ID (UUID) from the search request
+        #[arg(long)]
+        session_id: String,
+    },
+
+    /// Submit answers to clarification questions and resume the search session
+    Clarify {
+        /// Session ID (UUID) from the search request
+        #[arg(long)]
+        session_id: String,
+
+        /// Answers as a JSON object string (e.g. '{"field": "value"}')
+        #[arg(long)]
+        answers: String,
+    },
 }
 
 pub async fn run(args: BuyerArgs) {
@@ -148,6 +166,16 @@ pub async fn run(args: BuyerArgs) {
                         println!("Phase:    {job_phase}");
                         println!("Results:  {total_count}");
                         println!("Message:  {message}");
+
+                        if status == "waiting_clarification" {
+                            println!();
+                            println!(
+                                "Hint: Run `rinda-cli buyer messages --session-id {session_id}` to see questions,"
+                            );
+                            println!(
+                                "      then `rinda-cli buyer clarify --session-id {session_id} --answers '{{...}}'` to respond."
+                            );
+                        }
                     } else {
                         // Fallback: print raw JSON if structure is unexpected.
                         print_json(&json);
@@ -201,7 +229,112 @@ pub async fn run(args: BuyerArgs) {
                 Err(e) => exit_api_error("buyer enrich failed", e),
             }
         }
+
+        BuyerCommands::Messages { session_id } => {
+            let uuid = session_id.parse::<Uuid>().unwrap_or_else(|_| {
+                eprintln!("Invalid session ID — must be a valid UUID");
+                process::exit(1);
+            });
+
+            match client
+                .get_api_v1_lead_discovery_db_sessions_by_session_id_messages(&uuid)
+                .await
+            {
+                Ok(resp) => print_json(&resp.into_inner()),
+                Err(e) => exit_api_error("buyer messages failed", e),
+            }
+        }
+
+        BuyerCommands::Clarify {
+            session_id,
+            answers,
+        } => {
+            let workspace_id = require_workspace_id(&creds);
+
+            let answers_map = parse_answers_json(&answers).unwrap_or_else(|e| {
+                eprintln!("{e}");
+                process::exit(1);
+            });
+
+            let body = rinda_sdk::types::PostApiV1LeadDiscoveryClarifyBody {
+                session_id,
+                answers: answers_map,
+                workspace_id,
+            };
+
+            match client.post_api_v1_lead_discovery_clarify(&body).await {
+                Ok(resp) => print_json(&resp.into_inner()),
+                Err(e) => exit_api_error("buyer clarify failed", e),
+            }
+        }
     }
 
     process::exit(0);
+}
+
+/// Parse a JSON string into a `serde_json::Map` suitable for the clarify body.
+/// Returns an error message string if parsing fails or the value is not an object.
+pub fn parse_answers_json(s: &str) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+    let parsed: serde_json::Value = serde_json::from_str(s)
+        .map_err(|_| "Invalid answers — must be a valid JSON object string".to_string())?;
+
+    parsed.as_object().cloned().ok_or_else(|| {
+        "Invalid answers — must be a JSON object (not array or primitive)".to_string()
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_answers_json_valid_object() {
+        let result = parse_answers_json(r#"{"industry": "cosmetics", "region": "EU"}"#);
+        assert!(result.is_ok());
+        let map = result.unwrap();
+        assert_eq!(
+            map.get("industry").and_then(|v| v.as_str()),
+            Some("cosmetics")
+        );
+        assert_eq!(map.get("region").and_then(|v| v.as_str()), Some("EU"));
+    }
+
+    #[test]
+    fn parse_answers_json_empty_object() {
+        let result = parse_answers_json("{}");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn parse_answers_json_invalid_json_returns_error() {
+        let result = parse_answers_json("not json");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("valid JSON object string"));
+    }
+
+    #[test]
+    fn parse_answers_json_array_returns_error() {
+        // Arrays are valid JSON but not objects — should be rejected
+        let result = parse_answers_json(r#"["a", "b"]"#);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("JSON object"));
+    }
+
+    #[test]
+    fn parse_answers_json_primitive_returns_error() {
+        // Primitives are not objects — should be rejected
+        let result = parse_answers_json("42");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_answers_json_nested_values_preserved() {
+        // Should handle nested values correctly
+        let result = parse_answers_json(r#"{"count": 5, "active": true}"#);
+        assert!(result.is_ok());
+        let map = result.unwrap();
+        assert_eq!(map.get("count").and_then(|v| v.as_u64()), Some(5));
+        assert_eq!(map.get("active").and_then(|v| v.as_bool()), Some(true));
+    }
 }
