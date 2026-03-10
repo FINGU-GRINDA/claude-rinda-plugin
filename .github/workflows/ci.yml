@@ -63,5 +63,8 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Build release binary
+      - name: Build release binary (rinda-cli)
         run: cargo build --release -p rinda-cli
+
+      - name: Build release binary (rinda-mcp)
+        run: cargo build --release -p rinda-mcp

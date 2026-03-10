@@ -37,18 +37,27 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             artifact: rinda-cli-linux-x64
+            mcp_artifact: rinda-mcp-linux-x64
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             artifact: rinda-cli-linux-arm64
+            mcp_artifact: rinda-mcp-linux-arm64
           - target: x86_64-apple-darwin
             os: macos-latest
             artifact: rinda-cli-macos-x64
+            mcp_artifact: rinda-mcp-macos-x64
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact: rinda-cli-macos-arm64
+            mcp_artifact: rinda-mcp-macos-arm64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             artifact: rinda-cli-windows-x64.exe
+            mcp_artifact: rinda-mcp-windows-x64.exe
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            artifact: rinda-cli-windows-arm64.exe
+            mcp_artifact: rinda-mcp-windows-arm64.exe
 
     steps:
       - name: Checkout
@@ -70,8 +79,13 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - name: Build release binary
+      - name: Build release binary (rinda-cli)
         run: cargo build --release --target ${{ matrix.target }} -p rinda-cli
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Build release binary (rinda-mcp)
+        run: cargo build --release --target ${{ matrix.target }} -p rinda-mcp
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
@@ -83,9 +97,19 @@ jobs:
         if: runner.os == 'Windows'
         run: mv target/${{ matrix.target }}/release/rinda.exe ${{ matrix.artifact }}
 
+      - name: Rename MCP binary (Unix)
+        if: runner.os != 'Windows'
+        run: mv target/${{ matrix.target }}/release/rinda-mcp ${{ matrix.mcp_artifact }}
+
+      - name: Rename MCP binary (Windows)
+        if: runner.os == 'Windows'
+        run: mv target/${{ matrix.target }}/release/rinda-mcp.exe ${{ matrix.mcp_artifact }}
+
       - name: Generate SHA256 checksum (Unix)
         if: runner.os != 'Windows'
-        run: sha256sum ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256
+        run: |
+          sha256sum ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256
+          sha256sum ${{ matrix.mcp_artifact }} > ${{ matrix.mcp_artifact }}.sha256
 
       - name: Generate SHA256 checksum (Windows)
         if: runner.os == 'Windows'
@@ -93,6 +117,8 @@ jobs:
         run: |
           $hash = (Get-FileHash ${{ matrix.artifact }} -Algorithm SHA256).Hash.ToLower()
           "$hash  ${{ matrix.artifact }}" | Out-File -FilePath "${{ matrix.artifact }}.sha256" -Encoding ascii
+          $mcp_hash = (Get-FileHash ${{ matrix.mcp_artifact }} -Algorithm SHA256).Hash.ToLower()
+          "$mcp_hash  ${{ matrix.mcp_artifact }}" | Out-File -FilePath "${{ matrix.mcp_artifact }}.sha256" -Encoding ascii
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
@@ -105,6 +131,18 @@ jobs:
         with:
           name: ${{ matrix.artifact }}.sha256
           path: ${{ matrix.artifact }}.sha256
+
+      - name: Upload MCP binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.mcp_artifact }}
+          path: ${{ matrix.mcp_artifact }}
+
+      - name: Upload MCP checksum artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.mcp_artifact }}.sha256
+          path: ${{ matrix.mcp_artifact }}.sha256
 
   upload-assets:
     name: Upload Release Assets
@@ -140,4 +178,18 @@ jobs:
             artifacts/rinda-cli-macos-arm64.sha256
             artifacts/rinda-cli-windows-x64.exe
             artifacts/rinda-cli-windows-x64.exe.sha256
+            artifacts/rinda-cli-windows-arm64.exe
+            artifacts/rinda-cli-windows-arm64.exe.sha256
+            artifacts/rinda-mcp-linux-x64
+            artifacts/rinda-mcp-linux-x64.sha256
+            artifacts/rinda-mcp-linux-arm64
+            artifacts/rinda-mcp-linux-arm64.sha256
+            artifacts/rinda-mcp-macos-x64
+            artifacts/rinda-mcp-macos-x64.sha256
+            artifacts/rinda-mcp-macos-arm64
+            artifacts/rinda-mcp-macos-arm64.sha256
+            artifacts/rinda-mcp-windows-x64.exe
+            artifacts/rinda-mcp-windows-x64.exe.sha256
+            artifacts/rinda-mcp-windows-arm64.exe
+            artifacts/rinda-mcp-windows-arm64.exe.sha256
             artifacts/rinda-ai-plugin.zip
