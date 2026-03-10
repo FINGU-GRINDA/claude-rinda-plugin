@@ -3,6 +3,7 @@ use std::process;
 use base64::Engine;
 use clap::{Args, Subcommand};
 
+use crate::config::base_url;
 use crate::credentials::{
     self, Credentials, extract_exp_from_jwt, is_token_valid, load_credentials, save_credentials,
 };
@@ -20,7 +21,7 @@ pub enum AuthCommands {
     Url,
     /// Log in with a refresh token from the auth URL
     Token {
-        /// Refresh token from https://alpha.rinda.ai/cli-auth
+        /// Refresh token from the CLI auth page
         token: String,
     },
     /// Check authentication status
@@ -65,7 +66,7 @@ fn extract_jwt_claims(token: &str) -> (String, String, String) {
 pub async fn run(args: AuthArgs) {
     match args.command {
         AuthCommands::Url => {
-            println!("https://app.rinda.ai/cli-auth");
+            println!("{}/cli-auth", base_url());
         }
 
         AuthCommands::Token {

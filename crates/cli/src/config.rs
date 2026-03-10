@@ -10,5 +10,11 @@ pub fn credentials_path() -> Option<PathBuf> {
     rinda_config_dir().map(|dir| dir.join("credentials.json"))
 }
 
-/// Base URL for the Rinda API (host only, no path prefix).
-pub const BASE_URL: &str = "https://app.rinda.ai";
+/// Base URL for the Rinda API.
+/// Override with RINDA_BASE_URL env var (e.g. "https://alpha.rinda.ai" for testing).
+pub fn base_url() -> &'static str {
+    static URL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    URL.get_or_init(|| {
+        std::env::var("RINDA_BASE_URL").unwrap_or_else(|_| "https://app.rinda.ai".to_string())
+    })
+}

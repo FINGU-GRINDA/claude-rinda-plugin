@@ -11,7 +11,7 @@ use axum::routing::get;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-use crate::config::BASE_URL;
+use crate::config::base_url;
 use crate::credentials::Credentials;
 use crate::error::{Result, RindaError};
 
@@ -30,9 +30,9 @@ pub fn sdk_client(bearer_token: Option<&str>) -> rinda_sdk::Client {
             .default_headers(headers)
             .build()
             .expect("Failed to build reqwest client");
-        rinda_sdk::Client::new_with_client(BASE_URL, reqwest_client)
+        rinda_sdk::Client::new_with_client(base_url(), reqwest_client)
     } else {
-        rinda_sdk::Client::new(BASE_URL)
+        rinda_sdk::Client::new(base_url())
     }
 }
 
@@ -73,7 +73,8 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
 
     // Build the Google auth URL.
     let google_url = format!(
-        "{BASE_URL}/api/v1/auth/google?redirect_uri={}",
+        "{}/api/v1/auth/google?redirect_uri={}",
+        base_url(),
         urlencoding::encode("http://localhost:9876/callback")
     );
 
