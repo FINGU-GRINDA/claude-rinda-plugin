@@ -4,20 +4,19 @@ use std::path::Path;
 
 fn main() {
     // Tell cargo to rerun if the spec changes.
-    println!("cargo:rerun-if-changed=../../doc/openapi-patched.json");
+    println!("cargo:rerun-if-changed=../../doc/openapi.json");
 
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
     let dest = Path::new(&out_dir).join("codegen.rs");
 
     // Read and parse the OpenAPI spec.
-    let spec_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../doc/openapi-patched.json");
+    let spec_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../doc/openapi.json");
     let spec_str = fs::read_to_string(&spec_path)
-        .unwrap_or_else(|e| panic!("Failed to read openapi-patched.json: {e}"));
-    let mut spec: serde_json::Value = serde_json::from_str(&spec_str)
-        .unwrap_or_else(|e| panic!("Failed to parse openapi-patched.json as JSON: {e}"));
+        .unwrap_or_else(|e| panic!("Failed to read openapi.json: {e}"));
+    let mut spec: serde_json::Value =
+        serde_json::from_str(&spec_str).unwrap_or_else(|e| panic!("Failed to parse JSON: {e}"));
 
-    // Patch the spec for progenitor compatibility.
-    // Save securitySchemes before patching (they use different type values like "http").
+    // Save securitySchemes before patching (they use non-standard type values like "http").
     let security_schemes = spec
         .get("components")
         .and_then(|c| c.get("securitySchemes"))
@@ -53,22 +52,66 @@ fn main() {
     fs::write(&dest, content).unwrap_or_else(|e| panic!("Failed to write codegen.rs: {e}"));
 }
 
+const FREEFORM_SCHEMA: &str = r#"{"type":"object","additionalProperties":true}"#;
+
 /// Apply compatibility patches to the spec so progenitor can process it.
 fn patch_spec(spec: &mut serde_json::Value) {
-    // First: fix multi-content-type requestBodies (progenitor supports only one).
+    let freeform: serde_json::Value = serde_json::from_str(FREEFORM_SCHEMA).unwrap();
+    let json_content = serde_json::json!({
+        "application/json": { "schema": freeform }
+    });
+
     if let Some(paths) = spec.get_mut("paths").and_then(|v| v.as_object_mut()) {
         for (_path, methods) in paths.iter_mut() {
             if let Some(methods_obj) = methods.as_object_mut() {
-                for (_method, op) in methods_obj.iter_mut() {
+                for (method, op) in methods_obj.iter_mut() {
+                    if !["get", "post", "put", "patch", "delete"].contains(&method.as_str()) {
+                        continue;
+                    }
+
+                    // Fix empty requestBody content.
                     if let Some(rb) = op.get_mut("requestBody") {
+                        let content = rb.get("content").and_then(|c| c.as_object());
+                        if content.is_none_or(|c| c.is_empty()) {
+                            rb.as_object_mut()
+                                .unwrap()
+                                .insert("content".to_string(), json_content.clone());
+                        }
+                        // If multiple content types, keep only application/json.
                         fix_multi_content(rb);
+                    }
+
+                    // Fix missing responses.
+                    let responses = op.get("responses").and_then(|r| r.as_object());
+                    if responses.is_none_or(|r| r.is_empty()) {
+                        op.as_object_mut().unwrap().insert(
+                            "responses".to_string(),
+                            serde_json::json!({
+                                "200": {
+                                    "description": "Successful response",
+                                    "content": json_content.clone()
+                                }
+                            }),
+                        );
+                    } else if let Some(responses) =
+                        op.get_mut("responses").and_then(|r| r.as_object_mut())
+                    {
+                        // Fix responses with missing content.
+                        for (_code, resp) in responses.iter_mut() {
+                            let content = resp.get("content").and_then(|c| c.as_object());
+                            if content.is_none_or(|c| c.is_empty()) {
+                                resp.as_object_mut()
+                                    .unwrap()
+                                    .insert("content".to_string(), json_content.clone());
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    // Second: recursively remove null types from the entire spec.
+    // Recursively remove null types and normalize non-standard type names.
     remove_null_types(spec);
 }
 
@@ -104,7 +147,6 @@ fn remove_null_types(val: &mut serde_json::Value) {
             if let Some(t) = obj.get("type").and_then(|v| v.as_str())
                 && !STANDARD_TYPES.contains(&t)
             {
-                // Treat unknown scalar types as "string".
                 obj.insert(
                     "type".to_string(),
                     serde_json::Value::String("string".to_string()),
