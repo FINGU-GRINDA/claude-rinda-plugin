@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-cli-v0.1.1...rinda-cli-v0.1.2) (2026-03-10)
+
+
+### Bug Fixes
+
+* **cli:** unwrap API data envelope in auth and refresh flows ([#48](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/48)) ([d4642bf](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/d4642bf6dc8d2b245f7fb6588010c931c5ed2901))
+
 ## [0.1.1](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-cli-v0.1.0...rinda-cli-v0.1.1) (2026-03-10)
 
 
