@@ -28,7 +28,7 @@ The `rinda-cli` binary is required for authentication and API calls. It is downl
 If the binary is missing or needs manual installation, run:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/install.sh
+${CLAUDE_PLUGIN_ROOT}/../../bin/install.sh
 ```
 
 This detects the user's OS and architecture, then downloads the correct binary from GitHub Releases. The version is pinned to `.release-please-manifest.json` so the CLI always matches the plugin version.
@@ -36,7 +36,7 @@ This detects the user's OS and architecture, then downloads the correct binary f
 To verify the CLI is installed:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli --version
+${CLAUDE_PLUGIN_ROOT}/../../bin/rinda-cli --version
 ```
 
 ---
@@ -48,26 +48,26 @@ ${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli --version
 Before executing any workflow, ensure the access token is valid by running:
 
 ```
-${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth ensure-valid
+${CLAUDE_PLUGIN_ROOT}/../../bin/rinda-cli auth ensure-valid
 ```
 
 This command silently refreshes the token if it is expired. It exits with code 0 on success.
 
 ### First-time login
 
-1. Run `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth url` to get the login URL.
+1. Run `${CLAUDE_PLUGIN_ROOT}/../../bin/rinda-cli auth url` to get the login URL.
 2. User visits the URL, authenticates with Google, and receives a refresh token.
-3. Run `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth token <REFRESH_TOKEN>` to exchange it for an access token.
+3. Run `${CLAUDE_PLUGIN_ROOT}/../../bin/rinda-cli auth token <REFRESH_TOKEN>` to exchange it for an access token.
 
 ### Manual auth commands
 
 | Operation | Command |
 |-----------|---------|
-| Get login URL | `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth url` |
-| Login with token | `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth token <TOKEN>` |
-| Refresh token | `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth ensure-valid` |
-| Check status | `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth status` |
-| Logout | `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth logout` |
+| Get login URL | `${CLAUDE_PLUGIN_ROOT}/../../bin/rinda-cli auth url` |
+| Login with token | `${CLAUDE_PLUGIN_ROOT}/../../bin/rinda-cli auth token <TOKEN>` |
+| Refresh token | `${CLAUDE_PLUGIN_ROOT}/../../bin/rinda-cli auth ensure-valid` |
+| Check status | `${CLAUDE_PLUGIN_ROOT}/../../bin/rinda-cli auth status` |
+| Logout | `${CLAUDE_PLUGIN_ROOT}/../../bin/rinda-cli auth logout` |
 
 ### Reading credentials
 
