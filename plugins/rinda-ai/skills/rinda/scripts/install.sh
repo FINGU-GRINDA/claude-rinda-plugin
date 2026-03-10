@@ -23,15 +23,15 @@ BINARY="$INSTALL_DIR/rinda-cli"
 
 # Read pinned version from manifest.
 
-VERSION=$(python3 -c "import json; print(json.load(open('$MANIFEST'))['crates/cli'])" 2>/dev/null \
-  || node -e "console.log(JSON.parse(require('fs').readFileSync('$MANIFEST','utf8'))['crates/cli'])" 2>/dev/null)
+VERSION=$(python3 -c "import json; print(json.load(open('$MANIFEST'))['.'])" 2>/dev/null \
+  || node -e "console.log(JSON.parse(require('fs').readFileSync('$MANIFEST','utf8'))['.'])" 2>/dev/null)
 
 if [ -z "$VERSION" ]; then
   echo "error: could not read version from manifest" >&2
   exit 1
 fi
 
-TAG="rinda-cli-v${VERSION}"
+TAG="rinda-plugin-v${VERSION}"
 
 # Skip download if correct version already exists.
 if [ -x "$BINARY" ]; then
