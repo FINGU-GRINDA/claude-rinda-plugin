@@ -1,12 +1,18 @@
 {
   "name": "claude-rinda-plugin",
   "description": "RINDA AI marketplace - B2B export sales automation plugins for Claude Code",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "author": {
     "name": "GRINDA AI",
     "email": "support@grinda.ai"
   },
   "repository": "https://github.com/FINGU-GRINDA/claude-rinda-plugin",
   "license": "MIT",
-  "keywords": ["sales", "export", "b2b", "marketplace", "plugin"]
+  "keywords": [
+    "sales",
+    "export",
+    "b2b",
+    "marketplace",
+    "plugin"
+  ]
 }
