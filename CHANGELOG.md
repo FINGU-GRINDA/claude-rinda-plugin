@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-plugin-v0.1.4...rinda-plugin-v0.1.5) (2026-03-10)
+
+
+### Bug Fixes
+
+* install script reads version from plugin.json ([#70](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/70)) ([e28a8ee](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/e28a8ee85ec3675e1baa2d972baa013ba09902f5))
+
 ## [0.1.4](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-plugin-v0.1.3...rinda-plugin-v0.1.4) (2026-03-10)
 
 

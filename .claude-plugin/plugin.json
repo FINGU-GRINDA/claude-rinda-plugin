@@ -1,7 +1,7 @@
 {
   "name": "claude-rinda-plugin",
   "description": "RINDA AI marketplace - B2B export sales automation plugins for Claude Code",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "author": {
     "name": "GRINDA AI",
     "email": "support@grinda.ai"
