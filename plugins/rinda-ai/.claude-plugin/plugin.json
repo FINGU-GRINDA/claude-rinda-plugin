@@ -15,5 +15,12 @@
     "b2b",
     "outreach",
     "email"
-  ]
+  ],
+  "mcpServers": {
+    "rinda": {
+      "command": "~/.rinda/bin/rinda-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
 }
