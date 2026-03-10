@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   sync:
@@ -58,8 +59,17 @@ jobs:
           jq --arg v "$VERSION" '.version = $v' .claude-plugin/plugin.json > /tmp/plugin.json
           mv /tmp/plugin.json .claude-plugin/plugin.json
 
+          BRANCH="chore/sync-openapi-${VERSION}"
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add doc/openapi.json doc/.openapi-version .claude-plugin/plugin.json
           git commit -m "chore(sdk): sync openapi.json and bump plugin version to $VERSION"
-          git push
+          git push -u origin "$BRANCH"
+
+          gh pr create \
+            --title "chore(sdk): sync openapi.json to $LATEST_TAG" \
+            --body "Automated PR to sync \`openapi.json\` and bump plugin version to \`$VERSION\`." \
+            --base main \
+            --head "$BRANCH"
