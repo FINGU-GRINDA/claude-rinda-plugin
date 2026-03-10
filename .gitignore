@@ -2,3 +2,4 @@
 /target
 credentials.json
 .env
+bin/rinda-cli
