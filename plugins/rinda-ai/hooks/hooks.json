@@ -1,0 +1,17 @@
+{
+  "description": "Auto-install rinda-cli binary on session start",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/../../bin/install.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

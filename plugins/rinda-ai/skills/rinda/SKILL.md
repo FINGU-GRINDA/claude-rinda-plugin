@@ -12,10 +12,10 @@ All API interactions go through the CLI. Never use raw curl/HTTP calls.
 ## CLI Binary
 
 ```bash
-CLI="${CLAUDE_PLUGIN_ROOT}/../../bin/rinda-cli"
+CLI="$HOME/.rinda/bin/rinda-cli"
 ```
 
-If missing: `${CLAUDE_PLUGIN_ROOT}/../../bin/install.sh`
+If missing, install with: `${CLAUDE_PLUGIN_ROOT}/../../bin/install.sh`
 
 All commands output JSON. Parse output to present results to the user.
 

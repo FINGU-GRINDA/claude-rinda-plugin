@@ -7,7 +7,9 @@ REPO="FINGU-GRINDA/claude-rinda-plugin"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MANIFEST="$PLUGIN_ROOT/.release-please-manifest.json"
-BINARY="$SCRIPT_DIR/rinda-cli"
+INSTALL_DIR="$HOME/.rinda/bin"
+mkdir -p "$INSTALL_DIR"
+BINARY="$INSTALL_DIR/rinda-cli"
 
 # Read pinned version from manifest.
 if [ ! -f "$MANIFEST" ]; then
@@ -53,7 +55,10 @@ esac
 
 # Windows binary has .exe suffix.
 case "$OS" in
-  MINGW*|MSYS*|CYGWIN*) ARTIFACT="${ARTIFACT}.exe" ;;
+  MINGW*|MSYS*|CYGWIN*)
+    ARTIFACT="${ARTIFACT}.exe"
+    BINARY="${BINARY}.exe"
+    ;;
 esac
 
 URL="https://github.com/${REPO}/releases/download/${TAG}/${ARTIFACT}"
