@@ -7,11 +7,7 @@
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "extra-files": [
-        {
-          "type": "toml",
-          "path": "crates/cli/Cargo.toml",
-          "key": "package.version"
-        },
+        "crates/cli/Cargo.toml",
         {
           "type": "json",
           "path": ".claude-plugin/plugin.json",
