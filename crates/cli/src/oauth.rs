@@ -113,13 +113,19 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
         .map_err(|e| RindaError::Auth(format!("Token exchange failed: {e}")))?
         .into_inner();
 
-    let access_token = callback_resp
+    // The API wraps the payload in a `data` envelope.
+    let data = callback_resp
+        .get("data")
+        .and_then(|v| v.as_object())
+        .unwrap_or(&callback_resp);
+
+    let access_token = data
         .get("token")
         .and_then(|v| v.as_str())
         .ok_or_else(|| RindaError::Auth("No access token in callback response".into()))?
         .to_string();
 
-    let refresh_token = callback_resp
+    let refresh_token = data
         .get("refreshToken")
         .and_then(|v| v.as_str())
         .unwrap_or_default()
@@ -134,23 +140,30 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
 
     // Fetch user profile with the new token.
     let authed_client = sdk_client(Some(&access_token));
-    let profile = authed_client
+    let profile_resp = authed_client
         .get_api_v1_auth_me()
         .await
         .map_err(|e| RindaError::Auth(format!("Failed to fetch user profile: {e}")))?
         .into_inner();
 
-    let email = profile
+    // Response shape: { data: { user: { id, email, ... } } }
+    let user = profile_resp
+        .get("data")
+        .and_then(|d| d.get("user"))
+        .cloned()
+        .unwrap_or(serde_json::Value::Object(profile_resp.clone()));
+
+    let email = user
         .get("email")
         .and_then(|v| v.as_str())
         .unwrap_or_default()
         .to_string();
-    let user_id = profile
+    let user_id = user
         .get("id")
         .and_then(|v| v.as_str())
         .unwrap_or_default()
         .to_string();
-    let workspace_id = profile
+    let workspace_id = user
         .get("workspaceId")
         .and_then(|v| v.as_str())
         .unwrap_or_default()
