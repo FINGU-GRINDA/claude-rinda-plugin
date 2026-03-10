@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-plugin-v0.1.5...rinda-plugin-v0.1.6) (2026-03-10)
+
+
+### Features
+
+* **ci:** bundle rinda-ai plugin folder as zip in GitHub Releases ([#78](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/78)) ([4acab35](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/4acab358963faace9e7589fb7b4fadf641c6bafd))
+* **cli:** add buyer clarification response flow ([#75](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/75)) ([6208b49](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/6208b495115e260ee86e764d5ab2039999121220))
+
 ## [0.1.5](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-plugin-v0.1.4...rinda-plugin-v0.1.5) (2026-03-10)
 
 
