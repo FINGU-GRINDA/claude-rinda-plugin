@@ -46,47 +46,32 @@ pub enum BuyerCommands {
 }
 
 pub async fn run(args: BuyerArgs) {
-    let (client, _creds) = get_authenticated_client().await;
+    let (client, creds) = get_authenticated_client().await;
 
     match args.command {
         BuyerCommands::Search {
             industry,
-            countries,
-            buyer_type,
-            min_revenue,
-            limit,
+            countries: _countries,
+            buyer_type: _buyer_type,
+            min_revenue: _min_revenue,
+            limit: _limit,
         } => {
-            let mut body = serde_json::Map::new();
+            let workspace_id = creds.workspace_id.parse::<uuid::Uuid>().unwrap_or_else(|_| {
+                eprintln!("Invalid workspace ID in credentials");
+                process::exit(1);
+            });
 
-            if let Some(ind) = industry {
-                body.insert("industry".to_string(), serde_json::Value::String(ind));
-            }
-            if let Some(c) = countries {
-                // Convert comma-separated string to array.
-                let country_list: Vec<serde_json::Value> = c
-                    .split(',')
-                    .map(|s| serde_json::Value::String(s.trim().to_string()))
-                    .collect();
-                body.insert(
-                    "countries".to_string(),
-                    serde_json::Value::Array(country_list),
-                );
-            }
-            if let Some(bt) = buyer_type {
-                body.insert("buyerType".to_string(), serde_json::Value::String(bt));
-            }
-            if let Some(rev) = min_revenue {
-                body.insert(
-                    "minRevenue".to_string(),
-                    serde_json::Value::Number(
-                        serde_json::Number::from_f64(rev).unwrap_or(serde_json::Number::from(0)),
-                    ),
-                );
-            }
-            body.insert(
-                "limit".to_string(),
-                serde_json::Value::Number(serde_json::Number::from(limit)),
-            );
+            // Use the industry filter as the search query, or a default.
+            let query = industry.unwrap_or_else(|| "buyer search".to_string());
+
+            let body = rinda_sdk::types::PostApiV1LeadDiscoverySearchBody {
+                query,
+                workspace_id,
+                crawl_timeout_seconds: None,
+                locale: None,
+                session_id: None,
+                use_auto_timeout: true,
+            };
 
             match client.post_api_v1_lead_discovery_search(&body).await {
                 Ok(resp) => print_json(&resp.into_inner()),
@@ -95,8 +80,10 @@ pub async fn run(args: BuyerArgs) {
         }
 
         BuyerCommands::Enrich { buyer_id } => {
-            let mut body = serde_json::Map::new();
-            body.insert("leadId".to_string(), serde_json::Value::String(buyer_id));
+            let body = rinda_sdk::types::PostApiV1LeadDiscoveryEnrichBody {
+                website_url: buyer_id,
+                workspace_id: creds.workspace_id.clone(),
+            };
 
             match client.post_api_v1_lead_discovery_enrich(&body).await {
                 Ok(resp) => print_json(&resp.into_inner()),

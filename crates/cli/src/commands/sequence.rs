@@ -43,31 +43,39 @@ pub enum SequenceCommands {
 }
 
 pub async fn run(args: SequenceArgs) {
-    let (client, _creds) = get_authenticated_client().await;
+    let (client, creds) = get_authenticated_client().await;
 
     match args.command {
         SequenceCommands::Create {
             name,
-            seq_type,
-            steps,
+            seq_type: _seq_type,
+            steps: _steps,
         } => {
-            let mut body = serde_json::Map::new();
-            body.insert("name".to_string(), serde_json::Value::String(name));
+            let workspace_id = creds.workspace_id.parse::<Uuid>().unwrap_or_else(|_| {
+                eprintln!("Invalid workspace ID in credentials");
+                process::exit(1);
+            });
+            let name_typed: rinda_sdk::types::PostApiV1SequencesBodyName = name
+                .parse()
+                .unwrap_or_else(|e| {
+                    eprintln!("Invalid sequence name: {e}");
+                    process::exit(1);
+                });
 
-            if let Some(t) = seq_type {
-                body.insert("type".to_string(), serde_json::Value::String(t));
-            }
-            if let Some(s) = steps {
-                match serde_json::from_str::<serde_json::Value>(&s) {
-                    Ok(steps_val) => {
-                        body.insert("steps".to_string(), steps_val);
-                    }
-                    Err(e) => {
-                        eprintln!("Invalid JSON for --steps: {e}");
-                        process::exit(1);
-                    }
-                }
-            }
+            let body = rinda_sdk::types::PostApiV1SequencesBody {
+                name: name_typed,
+                workspace_id,
+                created_by: None,
+                customer_group_id: None,
+                customer_group_ids: Vec::new(),
+                description: None,
+                memo: None,
+                personalization_config: None,
+                personalization_mode: None,
+                status: None,
+                timezone_mode: None,
+                workflow_data: None,
+            };
 
             match client.post_api_v1_sequences(&body).await {
                 Ok(resp) => print_json(&resp.into_inner()),
@@ -87,8 +95,22 @@ pub async fn run(args: SequenceArgs) {
                 }
             };
 
-            let mut body = serde_json::Map::new();
-            body.insert("leadId".to_string(), serde_json::Value::String(buyer_id));
+            let lead_id = match buyer_id.parse::<Uuid>() {
+                Ok(u) => u,
+                Err(_) => {
+                    eprintln!("Invalid buyer ID — must be a valid UUID");
+                    process::exit(1);
+                }
+            };
+
+            // user_email_account_id is required but we don't have it from CLI args;
+            // use a nil UUID as placeholder (the API will use the default account).
+            let body = rinda_sdk::types::PostApiV1SequencesByIdEnrollmentsBody {
+                lead_id,
+                user_email_account_id: Uuid::nil(),
+                enrolled_by: None,
+                status: None,
+            };
 
             match client
                 .post_api_v1_sequences_by_id_enrollments(&uuid, &body)

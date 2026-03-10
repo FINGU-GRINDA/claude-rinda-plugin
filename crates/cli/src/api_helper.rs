@@ -35,11 +35,9 @@ pub async fn get_authenticated_client() -> (rinda_sdk::Client, Credentials) {
 
     // Attempt a refresh.
     let refresh_client = oauth::sdk_client(None);
-    let mut body = serde_json::Map::new();
-    body.insert(
-        "refreshToken".to_string(),
-        serde_json::Value::String(creds.refresh_token.clone()),
-    );
+    let body = rinda_sdk::types::PostApiV1AuthRefreshBody {
+        refresh_token: creds.refresh_token.clone(),
+    };
 
     match refresh_client.post_api_v1_auth_refresh(&body).await {
         Ok(resp) => {

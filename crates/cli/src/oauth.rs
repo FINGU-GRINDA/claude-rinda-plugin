@@ -103,8 +103,21 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
     .map_err(|_| RindaError::Auth("Timed out waiting for OAuth callback (120 s). Please try again.".into()))??;
 
     // Exchange the code for tokens.
-    let mut body = serde_json::Map::new();
-    body.insert("code".to_string(), serde_json::Value::String(code));
+    let body = rinda_sdk::types::PostApiV1AuthGoogleCallbackBody {
+        code,
+        country: None,
+        experience: None,
+        industry: None,
+        invite_code: None,
+        lang: None,
+        marketing_email_consented: None,
+        state: None,
+        target: None,
+        turnstile_token: None,
+        utm_campaign: None,
+        utm_medium: None,
+        utm_source: None,
+    };
 
     let client = sdk_client(None);
     let callback_resp = client
