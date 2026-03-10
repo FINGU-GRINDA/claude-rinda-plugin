@@ -44,7 +44,7 @@ fn main() {
     let mut generator = progenitor::Generator::new(&settings);
     let tokens = generator
         .generate_tokens(&spec)
-        .unwrap_or_else(|e| panic!("Progenitor code generation failed: {e}"));
+        .unwrap_or_else(|e| panic!("Progenitor code generation failed: {e:?}"));
 
     let ast = syn::parse2(tokens).unwrap_or_else(|e| panic!("Syn parse error: {e}"));
     let content = prettyplease::unparse(&ast);
@@ -151,6 +151,21 @@ fn remove_null_types(val: &mut serde_json::Value) {
                     "type".to_string(),
                     serde_json::Value::String("string".to_string()),
                 );
+            }
+
+            // Remove default values that don't match the declared type.
+            if let Some(typ) = obj.get("type").and_then(|v| v.as_str()).map(String::from) {
+                let bad_default = obj.get("default").is_some_and(|d| match typ.as_str() {
+                    "string" => !d.is_string(),
+                    "number" | "integer" => !d.is_number(),
+                    "boolean" => !d.is_boolean(),
+                    "array" => !d.is_array(),
+                    "object" => !d.is_object(),
+                    _ => false,
+                });
+                if bad_default {
+                    obj.remove("default");
+                }
             }
 
             for key in ["anyOf", "oneOf", "allOf"] {

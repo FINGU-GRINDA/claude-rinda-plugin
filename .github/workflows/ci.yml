@@ -10,6 +10,21 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  validate:
+    name: Validate plugin structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate plugin.json is valid JSON
+        run: jq empty .claude-plugin/plugin.json
+
+      - name: Validate marketplace.json is valid JSON
+        run: jq empty .claude-plugin/marketplace.json
+
+      - name: Validate rinda-ai plugin.json is valid JSON
+        run: jq empty plugins/rinda-ai/.claude-plugin/plugin.json
+
   check:
     name: Check (fmt, clippy, test)
     runs-on: ubuntu-latest
