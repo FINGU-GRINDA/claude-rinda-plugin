@@ -1486,11 +1486,16 @@ dependencies = [
 name = "rinda-mcp"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "reqwest",
  "rinda-common",
  "rinda-sdk",
  "rmcp",
+ "schemars 0.8.22",
+ "serde",
  "serde_json",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

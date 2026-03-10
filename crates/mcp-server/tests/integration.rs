@@ -113,11 +113,41 @@ async fn test_initialize_and_list_tools() {
         "tools should be an array, got: {:?}",
         tools
     );
-    assert_eq!(
-        tools.as_array().unwrap().len(),
-        0,
-        "tools list should be empty"
-    );
+    let tool_list = tools.as_array().unwrap();
+    assert_eq!(tool_list.len(), 15, "tools list should have 15 tools");
+
+    // Verify all expected tool names are present.
+    let tool_names: Vec<&str> = tool_list
+        .iter()
+        .filter_map(|t| t["name"].as_str())
+        .collect();
+
+    let expected_tools = [
+        "rinda_auth_status",
+        "rinda_auth_login",
+        "rinda_buyer_search",
+        "rinda_buyer_status",
+        "rinda_buyer_results",
+        "rinda_buyer_select",
+        "rinda_buyer_enrich",
+        "rinda_buyer_clarify",
+        "rinda_campaign_stats",
+        "rinda_email_send",
+        "rinda_reply_check",
+        "rinda_sequence_create",
+        "rinda_sequence_list",
+        "rinda_sequence_generate",
+        "rinda_sequence_add_contact",
+    ];
+
+    for expected in &expected_tools {
+        assert!(
+            tool_names.contains(expected),
+            "expected tool '{}' not found in list: {:?}",
+            expected,
+            tool_names
+        );
+    }
 
     // Close stdin to trigger server shutdown
     drop(stdin);
