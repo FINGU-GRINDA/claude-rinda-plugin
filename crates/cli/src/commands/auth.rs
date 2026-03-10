@@ -3,6 +3,7 @@ use std::process;
 use base64::Engine;
 use clap::{Args, Subcommand};
 
+use crate::config::base_url;
 use crate::credentials::{
     self, Credentials, extract_exp_from_jwt, is_token_valid, load_credentials, save_credentials,
 };
@@ -20,7 +21,7 @@ pub enum AuthCommands {
     Url,
     /// Log in with a refresh token from the auth URL
     Token {
-        /// Refresh token from https://alpha.rinda.ai/cli-auth
+        /// Refresh token from the CLI auth page
         token: String,
     },
     /// Check authentication status
@@ -65,7 +66,7 @@ fn extract_jwt_claims(token: &str) -> (String, String, String) {
 pub async fn run(args: AuthArgs) {
     match args.command {
         AuthCommands::Url => {
-            println!("https://alpha.rinda.ai/cli-auth");
+            println!("{}/cli-auth", base_url());
         }
 
         AuthCommands::Token {
@@ -73,11 +74,9 @@ pub async fn run(args: AuthArgs) {
         } => {
             // Exchange refresh token for an access token.
             let client = oauth::sdk_client(None);
-            let mut body = serde_json::Map::new();
-            body.insert(
-                "refreshToken".to_string(),
-                serde_json::Value::String(refresh_token.clone()),
-            );
+            let body = rinda_sdk::types::PostApiV1AuthRefreshBody {
+                refresh_token: refresh_token.clone(),
+            };
 
             let resp = match client.post_api_v1_auth_refresh(&body).await {
                 Ok(r) => r.into_inner(),
@@ -229,11 +228,9 @@ async fn ensure_valid() {
 
     // Attempt a refresh.
     let client = oauth::sdk_client(None);
-    let mut body = serde_json::Map::new();
-    body.insert(
-        "refreshToken".to_string(),
-        serde_json::Value::String(creds.refresh_token.clone()),
-    );
+    let body = rinda_sdk::types::PostApiV1AuthRefreshBody {
+        refresh_token: creds.refresh_token.clone(),
+    };
 
     match client.post_api_v1_auth_refresh(&body).await {
         Ok(resp) => {

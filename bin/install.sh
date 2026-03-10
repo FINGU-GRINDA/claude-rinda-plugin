@@ -5,15 +5,23 @@ set -euo pipefail
 
 REPO="FINGU-GRINDA/claude-rinda-plugin"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-MANIFEST="$PLUGIN_ROOT/.release-please-manifest.json"
-BINARY="$SCRIPT_DIR/rinda-cli"
+
+# Find .release-please-manifest.json by walking up from script location.
+find_manifest() {
+  local dir="$SCRIPT_DIR"
+  while [ "$dir" != "/" ]; do
+    [ -f "$dir/.release-please-manifest.json" ] && echo "$dir/.release-please-manifest.json" && return
+    dir="$(dirname "$dir")"
+  done
+  return 1
+}
+
+MANIFEST=$(find_manifest) || { echo "error: .release-please-manifest.json not found" >&2; exit 1; }
+INSTALL_DIR="$HOME/.rinda/bin"
+mkdir -p "$INSTALL_DIR"
+BINARY="$INSTALL_DIR/rinda-cli"
 
 # Read pinned version from manifest.
-if [ ! -f "$MANIFEST" ]; then
-  echo "error: .release-please-manifest.json not found" >&2
-  exit 1
-fi
 
 VERSION=$(python3 -c "import json; print(json.load(open('$MANIFEST'))['crates/cli'])" 2>/dev/null \
   || node -e "console.log(JSON.parse(require('fs').readFileSync('$MANIFEST','utf8'))['crates/cli'])" 2>/dev/null)
@@ -31,6 +39,8 @@ if [ -x "$BINARY" ]; then
   if [ "$CURRENT" = "$VERSION" ]; then
     exit 0
   fi
+  # Remove old version before downloading new one.
+  rm -f "$BINARY"
 fi
 
 # Detect OS.
@@ -53,7 +63,10 @@ esac
 
 # Windows binary has .exe suffix.
 case "$OS" in
-  MINGW*|MSYS*|CYGWIN*) ARTIFACT="${ARTIFACT}.exe" ;;
+  MINGW*|MSYS*|CYGWIN*)
+    ARTIFACT="${ARTIFACT}.exe"
+    BINARY="${BINARY}.exe"
+    ;;
 esac
 
 URL="https://github.com/${REPO}/releases/download/${TAG}/${ARTIFACT}"

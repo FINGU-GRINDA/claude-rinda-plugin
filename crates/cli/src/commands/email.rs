@@ -4,7 +4,9 @@ use std::process;
 
 use clap::{Args, Subcommand};
 
-use crate::api_helper::{exit_api_error, get_authenticated_client, print_json};
+use crate::api_helper::{
+    exit_api_error, get_authenticated_client, print_json, require_user_id, require_workspace_id,
+};
 
 #[derive(Debug, Args)]
 pub struct EmailArgs {
@@ -31,14 +33,38 @@ pub enum EmailCommands {
 }
 
 pub async fn run(args: EmailArgs) {
-    let (client, _creds) = get_authenticated_client().await;
+    let (client, creds) = get_authenticated_client().await;
 
     match args.command {
         EmailCommands::Send { to, subject, body } => {
-            let mut req_body = serde_json::Map::new();
-            req_body.insert("to".to_string(), serde_json::Value::String(to));
-            req_body.insert("subject".to_string(), serde_json::Value::String(subject));
-            req_body.insert("body".to_string(), serde_json::Value::String(body));
+            let user_id = require_user_id(&creds);
+            let workspace_id = require_workspace_id(&creds);
+            let subject_typed: rinda_sdk::types::PostApiV1EmailsSendBodySubject =
+                subject.parse().unwrap_or_else(|e| {
+                    eprintln!("Invalid subject: {e}");
+                    process::exit(1);
+                });
+
+            let req_body = rinda_sdk::types::PostApiV1EmailsSendBody {
+                to_email: to,
+                subject: subject_typed,
+                body_text: Some(body),
+                body_html: None,
+                user_id,
+                workspace_id,
+                bcc_emails: Vec::new(),
+                cc_emails: Vec::new(),
+                files: Vec::new(),
+                from_name: None,
+                in_reply_to: None,
+                include_signature: None,
+                lead_id: None,
+                references: None,
+                reply_to: None,
+                scheduled_at: None,
+                sequence_id: None,
+                step_id: None,
+            };
 
             match client.post_api_v1_emails_send(&req_body).await {
                 Ok(resp) => print_json(&resp.into_inner()),
