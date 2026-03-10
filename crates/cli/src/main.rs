@@ -1,8 +1,5 @@
 mod api_helper;
 mod commands;
-mod config;
-mod credentials;
-mod error;
 mod oauth;
 
 use clap::{Parser, Subcommand};
