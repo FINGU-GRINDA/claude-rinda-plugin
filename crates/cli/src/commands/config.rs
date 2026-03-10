@@ -2,7 +2,7 @@ use std::process;
 
 use clap::{Args, Subcommand};
 
-use crate::config::{RindaConfig, base_url};
+use rinda_common::config::{RindaConfig, base_url};
 
 #[derive(Debug, Args)]
 pub struct ConfigArgs {
