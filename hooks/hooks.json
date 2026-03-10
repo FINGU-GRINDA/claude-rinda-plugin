@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth ensure-valid"
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/install.sh && ${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth ensure-valid"
           }
         ]
       }
