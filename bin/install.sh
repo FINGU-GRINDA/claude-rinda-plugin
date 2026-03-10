@@ -39,6 +39,8 @@ if [ -x "$BINARY" ]; then
   if [ "$CURRENT" = "$VERSION" ]; then
     exit 0
   fi
+  # Remove old version before downloading new one.
+  rm -f "$BINARY"
 fi
 
 # Detect OS.
