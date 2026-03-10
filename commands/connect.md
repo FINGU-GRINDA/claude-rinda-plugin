@@ -1,107 +1,81 @@
 ---
-description: Connect your RINDA AI account via Google OAuth. Run once before using other RINDA commands.
+description: Connect your RINDA AI account. Run once before using other RINDA commands.
 allowed-tools: ["Bash", "Read"]
 argument-hint: "(no arguments needed)"
 ---
 
 # /rinda-ai:connect
 
-Connect your RINDA AI account via Google OAuth. Run this once before using any other RINDA commands.
+Connect your RINDA AI account. Run this once before using any other RINDA commands.
 
 ## Parameters
 
 None.
 
-## Credentials
-
-After login, credentials are stored at `~/.rinda/credentials.json`:
-
-```json
-{
-  "accessToken":  "eyJ...",
-  "refreshToken": "a8f3...",
-  "expiresAt":    1709726400000,
-  "workspaceId":  "uuid",
-  "userId":       "uuid",
-  "email":        "kim@company.com"
-}
-```
-
 ## Workflow
 
-This command is standalone (it does not delegate to rinda-agent). It handles authentication only via the CLI binary — no API calls are made by Claude.
+### Step 1 — Ensure CLI is installed
 
-### Step 1 — Run the CLI login command
-
-Tell the user to run the following command in their terminal:
+Run the install script to download the CLI binary if it is not already present:
 
 ```
-${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth login
+${CLAUDE_PLUGIN_ROOT}/bin/install.sh
 ```
 
-Explain what happens:
-1. The CLI starts a local HTTP server on port 9876.
-2. It opens the browser to `https://app.rinda.ai/api/v1/auth/google`.
-3. The user signs in with their Google account.
-4. Google redirects back to `http://localhost:9876/callback?code=xxx`.
-5. The CLI exchanges the code for tokens from the backend.
-6. Tokens are written to `~/.rinda/credentials.json` with file permissions 600.
-7. The terminal prints: `Logged in as <email>`.
-
-### Step 2 — Verify the connection
-
-After the user confirms login, read `~/.rinda/credentials.json` and display the connection status:
+### Step 2 — Check if already logged in
 
 ```
-RINDA AI Connection Status
-==========================
-Email:       kim@company.com
-Workspace:   <workspaceId>
-Token valid: yes (expires in 58 min)
-Session:     active (refresh token expires in 14 days)
+${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth status
 ```
 
-Calculate token expiry from `expiresAt` (milliseconds timestamp):
-- If `expiresAt - Date.now() > 0`: token is valid, show minutes remaining.
-- If expired: inform the user the hook will auto-refresh before each command.
+If the user is already logged in with a valid token, skip to Step 5.
 
-### Step 3 — Confirm readiness
+### Step 3 — Get the login URL
 
-Tell the user they are now ready to use all RINDA skills:
-- `/rinda-ai:buyer-search` — discover leads
-- `/rinda-ai:enrich` — enrich contacts
-- `/rinda-ai:sequence-create` — create email sequences
-- `/rinda-ai:reply-check` — check email replies
-- `/rinda-ai:campaign-report` — view campaign reports
+```
+${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth url
+```
 
-## Error Handling
+Show the URL to the user and ask them to:
+1. Open the URL in their browser.
+2. Sign in with their Google account.
+3. Copy the refresh token displayed on the page.
+4. Paste the token back here.
 
-| Error | Cause | Resolution |
-|-------|-------|------------|
-| Port 9876 already in use | Another process is using the port | Kill the conflicting process or restart the terminal |
-| Browser did not open | Headless environment | Copy the URL printed in the terminal and open it manually |
-| `~/.rinda/credentials.json` not found after login | Login was interrupted | Run `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth login` again |
-| Login timed out | User took too long to authenticate | Run the login command again |
+### Step 4 — Authenticate with the token
 
-## Output Format
+Once the user provides the token, run:
 
-Display a clear confirmation message after verifying credentials:
+```
+${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth token <PASTED_TOKEN>
+```
+
+The CLI exchanges the refresh token for an access token and saves credentials to `~/.rinda/credentials.json`.
+
+### Step 5 — Verify the connection
+
+Run `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth status` and display:
 
 ```
 Connected to RINDA AI
-  Account: kim@company.com
+  Account:   kim@company.com
   Workspace: <workspaceId>
+  Token:     valid (expires in N minutes)
 
 You're ready to start finding buyers. Try:
   /rinda-ai:buyer-search
 ```
 
-## Related Skills
+## Error Handling
 
-None. This command handles authentication only via the CLI binary — no API calls are made by Claude.
+| Error | Resolution |
+|-------|------------|
+| Install script fails | Check internet connection and retry |
+| "Invalid or expired token" | Get a fresh token from the login URL |
+| Token expires during session | The plugin hook auto-refreshes before each command |
 
 ## Notes
 
-- Tokens are auto-refreshed before every tool call by the plugin hook (`rinda-cli auth ensure-valid`). You do not need to re-run this command unless your session has been inactive for more than 14 days.
-- To check your current status at any time, run: `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth status`
-- To log out and delete local credentials: `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth logout`
+- Tokens are auto-refreshed before every tool call by the plugin hook (`rinda-cli auth ensure-valid`).
+- To check status: `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth status`
+- To log out: `${CLAUDE_PLUGIN_ROOT}/bin/rinda-cli auth logout`
