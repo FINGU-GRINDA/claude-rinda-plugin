@@ -44,14 +44,18 @@ pub async fn get_authenticated_client() -> (rinda_sdk::Client, Credentials) {
     match refresh_client.post_api_v1_auth_refresh(&body).await {
         Ok(resp) => {
             let resp = resp.into_inner();
-            let new_token = match resp.get("token").and_then(|v| v.as_str()) {
+            let data = resp
+                .get("data")
+                .and_then(|v| v.as_object())
+                .unwrap_or(&resp);
+            let new_token = match data.get("token").and_then(|v| v.as_str()) {
                 Some(t) => t.to_string(),
                 None => {
                     eprintln!("Session expired. Get a new token at: rinda auth url");
                     process::exit(1);
                 }
             };
-            let new_refresh_token = resp
+            let new_refresh_token = data
                 .get("refreshToken")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
