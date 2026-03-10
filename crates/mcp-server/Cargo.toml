@@ -12,9 +12,14 @@ path = "src/main.rs"
 [dependencies]
 rinda-sdk = { path = "../sdk" }
 rinda-common = { path = "../common" }
-rmcp = { version = "1.1.1", features = ["server", "transport-io"] }
+rmcp = { version = "1.1.1", features = ["server", "transport-io", "macros"] }
 tokio = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+reqwest = { workspace = true }
+schemars = "0.8"
+uuid = { version = "1", features = ["serde"] }
+chrono = "0.4"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "sync", "time", "process", "io-util"] }
