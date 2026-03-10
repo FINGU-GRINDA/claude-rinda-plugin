@@ -27,6 +27,34 @@ After that, just call `rinda-cli` directly. All commands output JSON.
 
 ---
 
+## MCP Server
+
+An MCP server (`rinda-mcp`) is registered in `plugin.json` and auto-discovered by Claude Code on session start. It exposes the same capabilities as the CLI as structured MCP tools, which Claude can call directly without shell commands.
+
+The following MCP tools are available:
+
+| Tool | Description |
+|------|-------------|
+| `rinda_auth_status` | Return current authentication status |
+| `rinda_auth_login` | Return browser login URL and instructions |
+| `rinda_buyer_search` | Start an async buyer search, returns sessionId |
+| `rinda_buyer_status` | Poll status of an async search session |
+| `rinda_buyer_results` | Get results of a completed search session |
+| `rinda_buyer_select` | Save selected leads from a discovery session |
+| `rinda_buyer_enrich` | Enrich a buyer/lead with contact and company data |
+| `rinda_buyer_clarify` | Submit answers to clarification questions |
+| `rinda_campaign_stats` | Get campaign dashboard statistics |
+| `rinda_email_send` | Send an email via RINDA |
+| `rinda_reply_check` | Get recent email replies |
+| `rinda_sequence_create` | Create a new email sequence |
+| `rinda_sequence_list` | List existing email sequences |
+| `rinda_sequence_generate` | AI-generate email steps for a sequence |
+| `rinda_sequence_add_contact` | Enroll a lead into an email sequence |
+
+The MCP server binary (`rinda-mcp`) is installed to `~/.rinda/bin/rinda-mcp` by the session-start install hook alongside `rinda-cli`. Auth is handled via `~/.rinda/credentials.json` — no additional configuration needed.
+
+---
+
 ## Auth
 
 Always run before any workflow:
