@@ -275,7 +275,7 @@ async fn ensure_valid() {
         Err(e) => {
             let err_str = format!("{e}");
             if err_str.contains("401") || err_str.contains("status code 401") {
-                eprintln!("Session expired. Run: rinda auth url");
+                eprintln!("Session expired. Get a new token at: rinda auth url");
                 process::exit(1);
             }
             if err_str.contains("connect") || err_str.contains("timeout") {
