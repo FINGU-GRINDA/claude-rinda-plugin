@@ -1,28 +1,40 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "release-type": "rust",
   "packages": {
-    "crates/cli": {
-      "component": "rinda-cli",
+    ".": {
+      "release-type": "simple",
+      "component": "rinda-plugin",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
       "extra-files": [
-        "bin/install.sh",
+        {
+          "type": "toml",
+          "path": "crates/cli/Cargo.toml",
+          "key": "package.version"
+        },
         {
           "type": "json",
-          "path": "../../.claude-plugin/plugin.json",
+          "path": ".claude-plugin/plugin.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "../../.claude-plugin/marketplace.json",
+          "path": ".claude-plugin/marketplace.json",
           "jsonpath": "$.plugins[0].version"
         },
         {
           "type": "json",
-          "path": "../../plugins/rinda-ai/.claude-plugin/plugin.json",
+          "path": "plugins/rinda-ai/.claude-plugin/plugin.json",
           "jsonpath": "$.version"
         }
+      ],
+      "changelog-sections": [
+        { "type": "feat", "section": "Features" },
+        { "type": "fix", "section": "Bug Fixes" },
+        { "type": "perf", "section": "Performance" },
+        { "type": "refactor", "section": "Refactoring" },
+        { "type": "docs", "section": "Documentation" },
+        { "type": "chore", "section": "Miscellaneous", "hidden": true }
       ]
     }
   },
