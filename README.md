@@ -91,7 +91,7 @@ This repo is a **plugin marketplace** — it can host multiple plugins under `pl
 plugins/
   rinda-ai/                 # B2B export sales plugin
     .claude-plugin/plugin.json
-    hooks/hooks.json        # Auto-installs CLI on session start
+    hooks/hooks.json        # Auto-installs CLI + MCP server on session start
     skills/
       rinda/
         SKILL.md            # Main skill (CLI commands + workflows)
@@ -100,15 +100,22 @@ plugins/
           email-writing.md
           export-sales.md
 bin/
-  install.sh                # CLI installer (cross-platform)
+  install.sh                # CLI + MCP server installer (cross-platform)
 crates/
   cli/                      # rinda-cli (Rust, handles auth + API)
   sdk/                      # Auto-generated from OpenAPI spec
+  mcp-server/               # rinda-mcp (Rust, MCP server via stdio)
 ```
 
 ### CLI
 
 The `rinda-cli` binary handles authentication and all API calls. It installs to `~/.rinda/bin/rinda-cli` automatically via a SessionStart hook.
+
+### MCP Server
+
+The `rinda-mcp` binary provides an MCP tool interface auto-discovered by Claude Code via `plugin.json`. It installs to `~/.rinda/bin/rinda-mcp` alongside the CLI. Claude Code launches it automatically on session start — no manual configuration needed inside the plugin.
+
+See [MCP Server (Standalone)](#mcp-server-standalone) below for usage outside the Claude Code plugin.
 
 | Command | Description |
 |---------|-------------|
@@ -119,6 +126,37 @@ The `rinda-cli` binary handles authentication and all API calls. It installs to 
 | `rinda-cli campaign stats` | Get campaign stats |
 | `rinda-cli sequence create` | Create email sequence |
 | `rinda-cli email send` | Send an email |
+
+---
+
+## MCP Server (Standalone)
+
+The `rinda-mcp` server can be used outside the Claude Code plugin context with any MCP-compatible client (Claude Desktop, Cursor, etc.).
+
+**Prerequisites:** Run `rinda-cli auth login` once to create `~/.rinda/credentials.json`. The MCP server reads credentials from this file automatically.
+
+**Install:**
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/FINGU-GRINDA/claude-rinda-plugin/main/bin/install.sh)
+```
+
+**Configure your MCP client:**
+
+For Claude Desktop (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "rinda": {
+      "command": "/Users/yourname/.rinda/bin/rinda-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Replace `/Users/yourname` with your home directory path. On Linux use `/home/yourname/.rinda/bin/rinda-mcp`.
 
 ---
 
@@ -145,6 +183,7 @@ Tokens refresh automatically. Only re-authenticate if unused for 14+ days.
 | Plugin type | Claude Code Marketplace |
 | Authentication | Google OAuth 2.0 |
 | CLI | Rust (cross-platform: Linux, macOS, Windows) |
+| MCP Server | rinda-mcp (stdio transport, auto-discovered by Claude Code) |
 | SDK | Auto-generated from OpenAPI spec via progenitor |
 | Token validity | Access: 1 hour (auto-refresh), Refresh: 14 days |
 | Credentials | `~/.rinda/credentials.json` |
