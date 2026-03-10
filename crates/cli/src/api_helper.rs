@@ -91,6 +91,33 @@ pub async fn get_authenticated_client() -> (rinda_sdk::Client, Credentials) {
     }
 }
 
+/// Parse the workspace_id from credentials as a UUID.
+/// Exits with a clear error if the workspace_id is empty or invalid.
+pub fn require_workspace_id(creds: &crate::credentials::Credentials) -> uuid::Uuid {
+    if creds.workspace_id.is_empty() {
+        eprintln!("No workspace ID in credentials. This account may not have a workspace on this environment.");
+        eprintln!("Try logging in again or switching environments with: rinda config set --env <alpha|beta>");
+        process::exit(1);
+    }
+    creds.workspace_id.parse::<uuid::Uuid>().unwrap_or_else(|_| {
+        eprintln!("Invalid workspace ID in credentials: {}", creds.workspace_id);
+        process::exit(1);
+    })
+}
+
+/// Parse the user_id from credentials as a UUID.
+/// Exits with a clear error if invalid.
+pub fn require_user_id(creds: &crate::credentials::Credentials) -> uuid::Uuid {
+    if creds.user_id.is_empty() {
+        eprintln!("No user ID in credentials. Try logging in again.");
+        process::exit(1);
+    }
+    creds.user_id.parse::<uuid::Uuid>().unwrap_or_else(|_| {
+        eprintln!("Invalid user ID in credentials: {}", creds.user_id);
+        process::exit(1);
+    })
+}
+
 /// Pretty-print a JSON map to stdout.
 pub fn print_json(value: &serde_json::Map<String, serde_json::Value>) {
     match serde_json::to_string_pretty(value) {

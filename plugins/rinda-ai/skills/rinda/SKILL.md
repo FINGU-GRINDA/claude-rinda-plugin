@@ -54,15 +54,39 @@ If it fails → "Run `/rinda-ai:connect` to authenticate."
 rinda-cli buyer search --industry "cosmetics" --countries "US,DE" --buyer-type "importer" --min-revenue 1000000 --limit 50
 ```
 
-All flags optional. If 422 error, fall back to `rinda-cli order history`.
+All flags optional. Returns a `sessionId` — the search runs async. If 422 error, fall back to `rinda-cli order history`.
+
+### Buyer Status
+
+```bash
+rinda-cli buyer status --session-id "uuid"
+```
+
+Check progress of an async search. Shows status, progress %, result count. Poll until `status: complete`.
+
+### Buyer Results
+
+```bash
+rinda-cli buyer results --session-id "uuid"
+```
+
+View discovered leads from a completed search session. Returns JSON array of companies with names, countries, business types.
+
+### Buyer Select
+
+```bash
+rinda-cli buyer select --session-id "uuid" --recommendation-id "rec_id"
+```
+
+Save selected leads from discovery results into the workspace.
 
 ### Buyer Enrich
 
 ```bash
-rinda-cli buyer enrich --buyer-id "lead_abc123"
+rinda-cli buyer enrich --buyer-id "https://company-website.com"
 ```
 
-One lead at a time. Loop with 1s delay for batch.
+Enrich a lead with additional data. Takes a website URL. One lead at a time. Loop with 1s delay for batch.
 
 ### Reply Check
 
@@ -78,6 +102,14 @@ rinda-cli campaign stats --period "30d"
 
 Accepts: `7d`, `30d`, `90d`, `2w`, `3m`, or bare number.
 
+### Sequence List
+
+```bash
+rinda-cli sequence list --limit 10
+```
+
+List existing sequences in the workspace. Optional: `--offset` for pagination.
+
 ### Sequence Create
 
 ```bash
@@ -85,6 +117,14 @@ rinda-cli sequence create --name "Campaign Name"
 ```
 
 Optional: `--type "email"`, `--steps '[{"delay":1,"template":"intro"}]'`
+
+### Sequence Generate
+
+```bash
+rinda-cli sequence generate --id "uuid"
+```
+
+AI-generate email steps for an existing sequence.
 
 ### Sequence Add Contact
 
@@ -108,26 +148,30 @@ rinda-cli order history --buyer-id "search term" --days-inactive 30
 
 ## Workflows
 
-### 1. Buyer Search
+### 1. Buyer Search (end-to-end)
 
 1. `rinda-cli auth ensure-valid`
-2. `rinda-cli buyer search --industry "X" --countries "Y" --limit 50`
-3. Score leads using **buyer-qualification** rules (see references)
-4. Present ranked table, offer: enrich? create sequence?
+2. `rinda-cli buyer search --industry "X" --countries "Y" --limit 50` → get `sessionId`
+3. Poll: `rinda-cli buyer status --session-id "ID"` until `status: complete`
+4. `rinda-cli buyer results --session-id "ID"` → view discovered leads
+5. Score leads using **buyer-qualification** rules (see references)
+6. Present ranked table, offer: select? enrich? create sequence?
 
 ### 2. Contact Enrichment
 
 1. `rinda-cli auth ensure-valid`
-2. For each lead: `rinda-cli buyer enrich --buyer-id "ID"` (1s delay)
+2. For each lead: `rinda-cli buyer enrich --buyer-id "https://website.com"` (1s delay)
 3. Classify: High/Medium/Low priority per **buyer-qualification** rules
 4. Present grouped results, offer: create sequence?
 
 ### 3. Email Sequence
 
 1. `rinda-cli auth ensure-valid`
-2. `rinda-cli sequence create --name "Name"`
-3. For each lead: `rinda-cli sequence add-contact --sequence-id "ID" --buyer-id "ID"`
-4. Present summary, suggest: check replies later
+2. `rinda-cli sequence list` → check existing sequences
+3. `rinda-cli sequence create --name "Name"` → get sequence ID
+4. `rinda-cli sequence generate --id "ID"` → AI-generate email steps
+5. For each lead: `rinda-cli sequence add-contact --sequence-id "ID" --buyer-id "ID"`
+6. Present summary, suggest: check replies later
 
 ### 4. Reply Management
 
@@ -145,7 +189,7 @@ rinda-cli order history --buyer-id "search term" --days-inactive 30
 
 ## Chaining
 
-`buyer-search → enrich → sequence-create → reply-check → campaign-report`
+`buyer-search → buyer-status → buyer-results → enrich → sequence-create → sequence-generate → add-contacts → reply-check → campaign-report`
 
 Carry forward IDs between steps. Always ask before proceeding to next.
 

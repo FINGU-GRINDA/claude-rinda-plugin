@@ -3,8 +3,9 @@
 use std::process;
 
 use clap::{Args, Subcommand};
+use uuid::Uuid;
 
-use crate::api_helper::{exit_api_error, get_authenticated_client, print_json};
+use crate::api_helper::{exit_api_error, get_authenticated_client, print_json, require_workspace_id};
 
 #[derive(Debug, Args)]
 pub struct BuyerArgs {
@@ -37,6 +38,31 @@ pub enum BuyerCommands {
         limit: u32,
     },
 
+    /// Check the status of an async search session
+    Status {
+        /// Session ID (UUID) from the search request
+        #[arg(long)]
+        session_id: String,
+    },
+
+    /// View the results of a completed search session
+    Results {
+        /// Session ID (UUID) from the search request
+        #[arg(long)]
+        session_id: String,
+    },
+
+    /// Select leads from discovery results to save them
+    Select {
+        /// Session ID (UUID) from the search request
+        #[arg(long)]
+        session_id: String,
+
+        /// Selected recommendation ID
+        #[arg(long)]
+        recommendation_id: String,
+    },
+
     /// Enrich a buyer (lead) with additional data
     Enrich {
         /// Buyer ID (lead ID) to enrich
@@ -56,10 +82,7 @@ pub async fn run(args: BuyerArgs) {
             min_revenue: _min_revenue,
             limit: _limit,
         } => {
-            let workspace_id = creds.workspace_id.parse::<uuid::Uuid>().unwrap_or_else(|_| {
-                eprintln!("Invalid workspace ID in credentials");
-                process::exit(1);
-            });
+            let workspace_id = require_workspace_id(&creds);
 
             // Use the industry filter as the search query, or a default.
             let query = industry.unwrap_or_else(|| "buyer search".to_string());
@@ -76,6 +99,101 @@ pub async fn run(args: BuyerArgs) {
             match client.post_api_v1_lead_discovery_search(&body).await {
                 Ok(resp) => print_json(&resp.into_inner()),
                 Err(e) => exit_api_error("buyer search failed", e),
+            }
+        }
+
+        BuyerCommands::Status { session_id } => {
+            let uuid = session_id.parse::<Uuid>().unwrap_or_else(|_| {
+                eprintln!("Invalid session ID — must be a valid UUID");
+                process::exit(1);
+            });
+
+            match client
+                .get_api_v1_lead_discovery_db_sessions_by_session_id(&uuid)
+                .await
+            {
+                Ok(resp) => {
+                    let json = resp.into_inner();
+
+                    // Try to extract human-readable fields from the response.
+                    let data = json.get("data").and_then(|v| v.as_object());
+                    let session = data
+                        .and_then(|d| d.get("session"))
+                        .and_then(|v| v.as_object());
+
+                    if let Some(s) = session {
+                        let status = s
+                            .get("status")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        let progress = s
+                            .get("progress")
+                            .and_then(|v| v.as_f64())
+                            .map(|p| format!("{:.0}", p))
+                            .unwrap_or_else(|| "?".to_string());
+                        let total_count = s
+                            .get("totalCount")
+                            .and_then(|v| v.as_u64())
+                            .map(|c| c.to_string())
+                            .unwrap_or_else(|| "?".to_string());
+                        let query = s
+                            .get("query")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("-");
+                        let job_phase = s
+                            .get("jobPhase")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("-");
+                        let message = s
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("-");
+
+                        println!("Session: {session_id}");
+                        println!("Query:    {query}");
+                        println!("Status:   {status} ({progress}%)");
+                        println!("Phase:    {job_phase}");
+                        println!("Results:  {total_count}");
+                        println!("Message:  {message}");
+                    } else {
+                        // Fallback: print raw JSON if structure is unexpected.
+                        print_json(&json);
+                    }
+                }
+                Err(e) => exit_api_error("buyer status failed", e),
+            }
+        }
+
+        BuyerCommands::Results { session_id } => {
+            let uuid = session_id.parse::<Uuid>().unwrap_or_else(|_| {
+                eprintln!("Invalid session ID — must be a valid UUID");
+                process::exit(1);
+            });
+
+            match client
+                .get_api_v1_lead_discovery_db_sessions_by_session_id_results(&uuid)
+                .await
+            {
+                Ok(resp) => print_json(&resp.into_inner()),
+                Err(e) => exit_api_error("buyer results failed", e),
+            }
+        }
+
+        BuyerCommands::Select {
+            session_id,
+            recommendation_id,
+        } => {
+            let workspace_id = require_workspace_id(&creds);
+
+            let body = rinda_sdk::types::PostApiV1LeadDiscoverySelectBody {
+                session_id,
+                selected_recommendation_id: recommendation_id,
+                workspace_id,
+            };
+
+            match client.post_api_v1_lead_discovery_select(&body).await {
+                Ok(resp) => print_json(&resp.into_inner()),
+                Err(e) => exit_api_error("buyer select failed", e),
             }
         }
 

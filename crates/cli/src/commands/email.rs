@@ -4,7 +4,7 @@ use std::process;
 
 use clap::{Args, Subcommand};
 
-use crate::api_helper::{exit_api_error, get_authenticated_client, print_json};
+use crate::api_helper::{exit_api_error, get_authenticated_client, print_json, require_user_id, require_workspace_id};
 
 #[derive(Debug, Args)]
 pub struct EmailArgs {
@@ -35,14 +35,8 @@ pub async fn run(args: EmailArgs) {
 
     match args.command {
         EmailCommands::Send { to, subject, body } => {
-            let user_id = creds.user_id.parse::<uuid::Uuid>().unwrap_or_else(|_| {
-                eprintln!("Invalid user ID in credentials");
-                process::exit(1);
-            });
-            let workspace_id = creds.workspace_id.parse::<uuid::Uuid>().unwrap_or_else(|_| {
-                eprintln!("Invalid workspace ID in credentials");
-                process::exit(1);
-            });
+            let user_id = require_user_id(&creds);
+            let workspace_id = require_workspace_id(&creds);
             let subject_typed: rinda_sdk::types::PostApiV1EmailsSendBodySubject = subject
                 .parse()
                 .unwrap_or_else(|e| {
