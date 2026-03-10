@@ -3,8 +3,10 @@
 use std::fmt::Display;
 use std::process;
 
-use crate::credentials::{self, Credentials, is_token_valid, load_credentials, save_credentials};
 use crate::oauth;
+use rinda_common::credentials::{
+    self, Credentials, is_token_valid, load_credentials, save_credentials,
+};
 
 /// Load credentials, ensure the token is valid (refreshing if needed), and build
 /// an authenticated SDK client. Exits with a non-zero status on any error.
@@ -58,7 +60,7 @@ pub async fn get_authenticated_client() -> (rinda_sdk::Client, Credentials) {
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or(creds.refresh_token.clone());
-            let new_expires_at = crate::credentials::extract_exp_from_jwt(&new_token);
+            let new_expires_at = rinda_common::credentials::extract_exp_from_jwt(&new_token);
 
             let new_creds = Credentials {
                 access_token: new_token.clone(),
@@ -93,7 +95,7 @@ pub async fn get_authenticated_client() -> (rinda_sdk::Client, Credentials) {
 
 /// Parse the workspace_id from credentials as a UUID.
 /// Exits with a clear error if the workspace_id is empty or invalid.
-pub fn require_workspace_id(creds: &crate::credentials::Credentials) -> uuid::Uuid {
+pub fn require_workspace_id(creds: &rinda_common::credentials::Credentials) -> uuid::Uuid {
     if creds.workspace_id.is_empty() {
         eprintln!(
             "No workspace ID in credentials. This account may not have a workspace on this environment."
@@ -117,7 +119,7 @@ pub fn require_workspace_id(creds: &crate::credentials::Credentials) -> uuid::Uu
 
 /// Parse the user_id from credentials as a UUID.
 /// Exits with a clear error if invalid.
-pub fn require_user_id(creds: &crate::credentials::Credentials) -> uuid::Uuid {
+pub fn require_user_id(creds: &rinda_common::credentials::Credentials) -> uuid::Uuid {
     if creds.user_id.is_empty() {
         eprintln!("No user ID in credentials. Try logging in again.");
         process::exit(1);

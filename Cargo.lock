@@ -1346,24 +1346,35 @@ dependencies = [
 
 [[package]]
 name = "rinda-cli"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "axum",
  "base64",
  "chrono",
  "clap",
- "dirs",
- "fs2",
  "open",
  "reqwest",
+ "rinda-common",
  "rinda-sdk",
  "serde",
  "serde_json",
  "tempfile",
- "thiserror 2.0.18",
  "tokio",
  "urlencoding",
  "uuid",
+]
+
+[[package]]
+name = "rinda-common"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "dirs",
+ "fs2",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

@@ -11,9 +11,9 @@ use axum::routing::get;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
-use crate::config::base_url;
-use crate::credentials::Credentials;
-use crate::error::{Result, RindaError};
+use rinda_common::config::base_url;
+use rinda_common::credentials::Credentials;
+use rinda_common::error::{Result, RindaError};
 
 /// Build a progenitor SDK client with an optional bearer token.
 /// When `bearer_token` is `None`, no Authorization header is added.

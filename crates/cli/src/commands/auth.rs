@@ -3,11 +3,11 @@ use std::process;
 use base64::Engine;
 use clap::{Args, Subcommand};
 
-use crate::config::base_url;
-use crate::credentials::{
+use crate::oauth;
+use rinda_common::config::base_url;
+use rinda_common::credentials::{
     self, Credentials, extract_exp_from_jwt, is_token_valid, load_credentials, save_credentials,
 };
-use crate::oauth;
 
 #[derive(Debug, Args)]
 pub struct AuthArgs {
