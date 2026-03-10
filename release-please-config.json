@@ -7,10 +7,7 @@
       "changelog-path": "CHANGELOG.md",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
-      "extra-files": [
-        "crates/cli/Cargo.toml",
-        "crates/sdk/Cargo.toml"
-      ]
+      "extra-files": []
     }
   },
   "separate-pull-requests": false
