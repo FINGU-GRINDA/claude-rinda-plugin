@@ -191,6 +191,16 @@ pub async fn get_authenticated_client() -> Result<(rinda_sdk::Client, Credential
     }
 }
 
+/// Build an SDK client using a provided RINDA access token.
+///
+/// This is used when the MCP server receives a validated session token
+/// and needs to proxy API calls with the user's RINDA token, rather than
+/// reading tokens from the local credentials file.
+#[allow(dead_code)]
+pub fn get_authenticated_client_with_token(rinda_access_token: &str) -> rinda_sdk::Client {
+    sdk_client(Some(rinda_access_token))
+}
+
 /// Build an authenticated SDK client with an optional bearer token.
 pub fn sdk_client(bearer_token: Option<&str>) -> rinda_sdk::Client {
     if let Some(token) = bearer_token {
