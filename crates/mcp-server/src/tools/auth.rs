@@ -1,4 +1,4 @@
-// Auth tool implementations: rinda_auth_status, rinda_auth_login.
+// Auth tool implementations: rinda_auth_status.
 
 use crate::auth;
 
@@ -78,40 +78,9 @@ pub async fn auth_status(parts: Option<&http::request::Parts>) -> String {
     }
 }
 
-/// Implementation for the rinda_auth_login tool.
-/// Returns instructions for authenticating via the MCP OAuth 2.0 flow.
-/// Authentication is handled automatically by the MCP client (e.g. Claude Desktop)
-/// through the server's OAuth endpoints.
-pub async fn auth_login() -> String {
-    serde_json::json!({
-        "instructions": "Authentication is handled automatically by your MCP client (e.g. Claude Desktop) via the OAuth 2.0 flow. If you are not yet authenticated, your client should prompt you to sign in with Google automatically when you try to use any Rinda tool. You can check your current auth status using the rinda_auth_status tool. Do NOT visit the /oauth/authorize URL directly — it requires parameters that only the MCP client provides."
-    })
-    .to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Acceptance criteria: rinda_auth_login should return a URL and instructions
-    /// without requiring credentials (works when not authenticated).
-    #[tokio::test]
-    async fn auth_login_returns_instructions() {
-        let result = auth_login().await;
-        let parsed: serde_json::Value =
-            serde_json::from_str(&result).expect("should return valid JSON");
-
-        // Should NOT include a direct auth_url (users should not visit it directly)
-        assert!(
-            parsed.get("auth_url").is_none(),
-            "should not include auth_url to avoid users visiting it directly"
-        );
-
-        let instructions = parsed["instructions"]
-            .as_str()
-            .expect("should have instructions");
-        assert!(!instructions.is_empty(), "instructions should not be empty");
-    }
 
     /// Acceptance criteria: rinda_auth_status should return authenticated=false with
     /// a clear message when no parts/token are provided.
@@ -165,14 +134,6 @@ mod tests {
         );
         assert_eq!(parsed["email"].as_str(), Some("test@example.com"));
         assert_eq!(parsed["workspace_id"].as_str(), Some("ws-test"));
-    }
-
-    /// Auth login response should be parseable as JSON regardless of environment.
-    #[tokio::test]
-    async fn auth_login_response_is_valid_json() {
-        let result = auth_login().await;
-        let parsed: Result<serde_json::Value, _> = serde_json::from_str(&result);
-        assert!(parsed.is_ok(), "auth_login should always return valid JSON");
     }
 
     /// Acceptance criteria from issue #82: auth_status should work from Bearer token
