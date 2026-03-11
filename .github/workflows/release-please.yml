@@ -42,6 +42,7 @@ jobs:
             os: ubuntu-latest
             artifact: rinda-cli-linux-arm64
             mcp_artifact: rinda-mcp-linux-arm64
+            use_cross: true
           - target: x86_64-apple-darwin
             os: macos-latest
             artifact: rinda-cli-macos-x64
@@ -74,11 +75,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
-      - name: Install cross-compilation tools (Linux ARM64 musl)
-        if: matrix.target == 'aarch64-unknown-linux-musl'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -86,14 +85,10 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Build release binary (rinda-cli)
-        run: cargo build --release --target ${{ matrix.target }} -p rinda-cli
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
+        run: ${{ matrix.use_cross && 'cross' || 'cargo' }} build --release --target ${{ matrix.target }} -p rinda-cli
 
       - name: Build release binary (rinda-mcp)
-        run: cargo build --release --target ${{ matrix.target }} -p rinda-mcp
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
+        run: ${{ matrix.use_cross && 'cross' || 'cargo' }} build --release --target ${{ matrix.target }} -p rinda-mcp
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
