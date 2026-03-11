@@ -411,6 +411,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = axum::Router::new()
         .route("/health", get(health))
         .route(
+            "/.well-known/oauth-protected-resource",
+            get(oauth::protected_resource_metadata),
+        )
+        .route(
             "/.well-known/oauth-authorization-server",
             get(oauth::metadata),
         )
