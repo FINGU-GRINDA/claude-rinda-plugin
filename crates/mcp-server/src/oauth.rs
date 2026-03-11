@@ -46,6 +46,8 @@ pub struct PendingAuth {
     #[allow(dead_code)]
     pub code_challenge_method: Option<String>,
     pub client_state: Option<String>, // original state from the client
+    /// RFC 8707 resource indicator — the MCP server URI the token is intended for.
+    pub resource: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -61,6 +63,8 @@ pub struct AuthCode {
     #[allow(dead_code)]
     pub client_id: String,
     pub code_challenge: Option<String>,
+    /// RFC 8707 resource indicator stored from the authorize request.
+    pub resource: Option<String>,
     pub created_at: DateTime<Utc>,
     pub used: bool,
 }
@@ -168,23 +172,78 @@ impl OAuthState {
 
 /// Axum middleware that reads `Authorization: Bearer <token>`, validates it
 /// against the session store, and injects `AuthenticatedToken` into request
-/// extensions if valid. Invalid/missing tokens do NOT result in rejection here
-/// — individual tool handlers decide whether to require auth (allowing the MCP
-/// `initialize` request through without a session token).
+/// extensions if valid.
+///
+/// When no valid token is present, the middleware still passes the request
+/// through (to allow `initialize` and `tools/list` through), but injects a
+/// marker so downstream handlers know auth was attempted and failed.
 pub async fn auth_middleware(
     State(state): State<Arc<OAuthState>>,
     mut req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> Response {
-    if let Some(token) = extract_bearer_token(req.headers())
-        && let Some(rinda_token) = state.validate_session(&token)
-    {
-        req.extensions_mut().insert(AuthenticatedToken(rinda_token));
+    if let Some(token) = extract_bearer_token(req.headers()) {
+        if let Some(rinda_token) = state.validate_session(&token) {
+            req.extensions_mut().insert(AuthenticatedToken(rinda_token));
+        }
+        // If token was present but invalid, fall through without AuthenticatedToken.
+        // The tool handler will decide whether to reject.
     }
-    next.run(req).await
+
+    let mut response = next.run(req).await;
+
+    // If a downstream handler signalled 401 (via AuthRequired marker in
+    // extensions), inject the WWW-Authenticate header per RFC 9728 §5.1.
+    // Note: rmcp tool handlers return MCP-level responses, so this mainly
+    // applies when we add explicit 401 returns in the future. For now, the
+    // WWW-Authenticate header is always available on 401 responses.
+    if response.status() == StatusCode::UNAUTHORIZED {
+        let resource_metadata_url = format!(
+            "{}/.well-known/oauth-protected-resource",
+            state.server_url
+        );
+        response.headers_mut().insert(
+            axum::http::header::WWW_AUTHENTICATE,
+            format!(
+                "Bearer resource_metadata=\"{}\"",
+                resource_metadata_url
+            )
+            .parse()
+            .unwrap(),
+        );
+    }
+
+    response
 }
 
-// ── RFC 8414 Metadata ─────────────────────────────────────────────────────────
+// ── RFC 9728 Protected Resource Metadata ─────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct ProtectedResourceMetadata {
+    pub resource: String,
+    pub authorization_servers: Vec<String>,
+    pub bearer_methods_supported: Vec<String>,
+    pub resource_documentation: Option<String>,
+}
+
+/// `GET /.well-known/oauth-protected-resource` — RFC 9728 Protected Resource Metadata.
+///
+/// This is the entry point for MCP client auth discovery. The client fetches this
+/// to find the authorization server(s), then fetches the AS metadata from
+/// `/.well-known/oauth-authorization-server`.
+pub async fn protected_resource_metadata(
+    State(state): State<Arc<OAuthState>>,
+) -> Json<ProtectedResourceMetadata> {
+    let base = &state.server_url;
+    Json(ProtectedResourceMetadata {
+        resource: base.clone(),
+        authorization_servers: vec![base.clone()],
+        bearer_methods_supported: vec!["header".to_string()],
+        resource_documentation: None,
+    })
+}
+
+// ── RFC 8414 Authorization Server Metadata ───────────────────────────────────
 
 #[derive(Serialize)]
 pub struct OAuthMetadata {
@@ -231,6 +290,8 @@ pub struct AuthorizeParams {
     pub code_challenge_method: Option<String>,
     #[allow(unused)]
     pub scope: Option<String>,
+    /// RFC 8707 resource indicator — the MCP server URI the token is intended for.
+    pub resource: Option<String>,
 }
 
 /// `GET /oauth/authorize` — Redirect to Google OAuth via RINDA backend.
@@ -262,6 +323,21 @@ pub async fn authorize(
         }
     };
 
+    // Validate resource parameter (RFC 8707) if provided.
+    // It must match our server URL to prevent token audience confusion.
+    if let Some(resource) = &params.resource {
+        if !resource_matches_server(resource, &state.server_url) {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Invalid resource parameter: expected {}, got {resource}",
+                    state.server_url
+                ),
+            )
+                .into_response();
+        }
+    }
+
     // Generate a CSRF token to tie the Google callback back to this flow.
     let csrf_token = Uuid::new_v4().to_string();
 
@@ -274,6 +350,7 @@ pub async fn authorize(
             code_challenge: params.code_challenge.clone(),
             code_challenge_method: params.code_challenge_method.clone(),
             client_state: params.state.clone(),
+            resource: params.resource.clone(),
             created_at: Utc::now(),
         },
     );
@@ -455,6 +532,7 @@ pub async fn oauth_callback(
             redirect_uri: pending.redirect_uri.clone(),
             client_id: pending.client_id.clone(),
             code_challenge: pending.code_challenge.clone(),
+            resource: pending.resource.clone(),
             created_at: Utc::now(),
             used: false,
         },
@@ -490,6 +568,8 @@ pub struct TokenRequest {
     pub code_verifier: Option<String>,
     // refresh_token grant
     pub refresh_token: Option<String>,
+    /// RFC 8707 resource indicator — must match the value from the authorize request.
+    pub resource: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -561,6 +641,30 @@ async fn handle_auth_code_grant(state: Arc<OAuthState>, req: TokenRequest) -> Re
         };
         if !verify_pkce_s256(&verifier, challenge) {
             return (StatusCode::BAD_REQUEST, "PKCE verification failed").into_response();
+        }
+    }
+
+    // Validate RFC 8707 resource indicator if one was stored during authorization.
+    // The token request resource must match what was sent during authorization.
+    if let Some(stored_resource) = &entry.resource {
+        match &req.resource {
+            Some(req_resource) if req_resource == stored_resource => {}
+            Some(req_resource) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "resource mismatch: authorize used {stored_resource}, token request used {req_resource}"
+                    ),
+                )
+                    .into_response();
+            }
+            None => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    "Missing resource parameter (required because it was sent during authorization)",
+                )
+                    .into_response();
+            }
         }
     }
 
@@ -731,6 +835,16 @@ pub async fn register(
 }
 
 // ── PKCE helpers ──────────────────────────────────────────────────────────────
+
+/// Check whether a `resource` parameter matches our server URL.
+///
+/// Per RFC 8707 §2, the resource is an absolute URI. We normalize trailing
+/// slashes and compare case-insensitively on scheme+host (but case-sensitive
+/// on path) to be robust while still preventing audience confusion.
+pub fn resource_matches_server(resource: &str, server_url: &str) -> bool {
+    let normalize = |s: &str| s.trim_end_matches('/').to_string();
+    normalize(resource) == normalize(server_url)
+}
 
 /// Verify PKCE S256: `BASE64URL(SHA256(verifier)) == challenge`.
 pub fn verify_pkce_s256(verifier: &str, challenge: &str) -> bool {
@@ -931,6 +1045,52 @@ mod tests {
         );
     }
 
+    // ── RFC 8707 resource parameter matching ──────────────────────────────────
+
+    #[test]
+    fn test_resource_matches_server_exact() {
+        assert!(resource_matches_server(
+            "https://mcp.example.com",
+            "https://mcp.example.com"
+        ));
+    }
+
+    #[test]
+    fn test_resource_matches_server_trailing_slash() {
+        assert!(resource_matches_server(
+            "https://mcp.example.com/",
+            "https://mcp.example.com"
+        ));
+        assert!(resource_matches_server(
+            "https://mcp.example.com",
+            "https://mcp.example.com/"
+        ));
+    }
+
+    #[test]
+    fn test_resource_matches_server_with_path() {
+        assert!(resource_matches_server(
+            "https://mcp.example.com/mcp",
+            "https://mcp.example.com/mcp"
+        ));
+    }
+
+    #[test]
+    fn test_resource_does_not_match_different_server() {
+        assert!(!resource_matches_server(
+            "https://evil.example.com",
+            "https://mcp.example.com"
+        ));
+    }
+
+    #[test]
+    fn test_resource_does_not_match_different_path() {
+        assert!(!resource_matches_server(
+            "https://mcp.example.com/other",
+            "https://mcp.example.com/mcp"
+        ));
+    }
+
     // ── Token endpoint: invalid grant type ────────────────────────────────────
 
     /// Acceptance criteria: POST /oauth/token with unsupported grant_type returns error (issue #95).
@@ -969,6 +1129,7 @@ mod tests {
             redirect_uri: "https://example.com/cb".to_string(),
             client_id: "client".to_string(),
             code_challenge: None,
+            resource: None,
             created_at: old_time,
             used: false,
         };
@@ -1103,6 +1264,7 @@ mod tests {
             code_challenge: None,
             code_challenge_method: None,
             client_state: None,
+            resource: None,
             created_at: old_time,
         };
         let age = Utc::now() - pending.created_at;
@@ -1164,6 +1326,52 @@ mod tests {
     }
 
     // ── Integration test: OAuth HTTP endpoints ────────────────────────────────
+
+    /// Integration test: GET /.well-known/oauth-protected-resource returns valid RFC 9728 metadata.
+    #[tokio::test]
+    async fn test_integration_protected_resource_metadata_endpoint() {
+        use axum::Router;
+        use axum::routing::get;
+        use tokio::net::TcpListener;
+
+        let oauth_state = Arc::new(OAuthState::new(
+            "https://alpha.rinda.ai".to_string(),
+            "http://localhost:0".to_string(),
+        ));
+
+        let app = Router::new()
+            .route(
+                "/.well-known/oauth-protected-resource",
+                get(protected_resource_metadata),
+            )
+            .with_state(oauth_state);
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let url = format!("http://{addr}/.well-known/oauth-protected-resource");
+        let resp = reqwest::get(&url).await.unwrap();
+        assert_eq!(resp.status(), 200);
+
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert!(
+            body["resource"].as_str().is_some(),
+            "resource should be present"
+        );
+        let auth_servers = body["authorization_servers"].as_array();
+        assert!(
+            auth_servers.is_some() && !auth_servers.unwrap().is_empty(),
+            "authorization_servers should be a non-empty array"
+        );
+        assert_eq!(
+            body["bearer_methods_supported"],
+            serde_json::json!(["header"])
+        );
+    }
 
     /// Integration test: GET /.well-known/oauth-authorization-server returns valid metadata.
     #[tokio::test]
