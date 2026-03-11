@@ -91,7 +91,7 @@ async fn test_health_endpoint() {
     let _ = child.wait().await;
 }
 
-/// Acceptance criteria: MCP server exposes all 15 tools over HTTP transport
+/// Acceptance criteria: MCP server exposes all 14 tools over HTTP transport
 /// (from issue #81: "convert MCP server from stdio to remote HTTP transport")
 #[tokio::test]
 async fn test_initialize_and_list_tools_http() {
@@ -243,12 +243,12 @@ async fn test_initialize_and_list_tools_http() {
     let tool_list = tools.as_array().unwrap();
     assert_eq!(
         tool_list.len(),
-        15,
-        "tools list should have 15 tools, got: {}",
+        14,
+        "tools list should have 14 tools, got: {}",
         tool_list.len()
     );
 
-    // Verify all 15 expected tool names are present
+    // Verify all 14 expected tool names are present
     let tool_names: Vec<&str> = tool_list
         .iter()
         .filter_map(|t| t["name"].as_str())
@@ -256,7 +256,6 @@ async fn test_initialize_and_list_tools_http() {
 
     let expected_tools = [
         "rinda_auth_status",
-        "rinda_auth_login",
         "rinda_buyer_search",
         "rinda_buyer_status",
         "rinda_buyer_results",
