@@ -23,6 +23,8 @@ enum Commands {
     Config(commands::config::ConfigArgs),
     /// Email sending commands
     Email(commands::email::EmailArgs),
+    /// Lead management commands (CRUD, search, status, assessment)
+    Lead(commands::lead::LeadArgs),
     /// Order history commands (uses leads/search; no orders API exists)
     Order(commands::order::OrderArgs),
     /// Email reply commands
@@ -41,6 +43,7 @@ async fn main() {
         Commands::Campaign(args) => commands::campaign::run(args).await,
         Commands::Config(args) => commands::config::run(args).await,
         Commands::Email(args) => commands::email::run(args).await,
+        Commands::Lead(args) => commands::lead::run(args).await,
         Commands::Order(args) => commands::order::run(args).await,
         Commands::Reply(args) => commands::reply::run(args).await,
         Commands::Sequence(args) => commands::sequence::run(args).await,
