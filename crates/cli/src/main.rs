@@ -31,6 +31,8 @@ enum Commands {
     Reply(commands::reply::ReplyArgs),
     /// Sequence management commands
     Sequence(commands::sequence::SequenceArgs),
+    /// Workspace management commands
+    Workspace(commands::workspace::WorkspaceArgs),
 }
 
 #[tokio::main]
@@ -47,5 +49,6 @@ async fn main() {
         Commands::Order(args) => commands::order::run(args).await,
         Commands::Reply(args) => commands::reply::run(args).await,
         Commands::Sequence(args) => commands::sequence::run(args).await,
+        Commands::Workspace(args) => commands::workspace::run(args).await,
     }
 }
