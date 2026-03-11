@@ -164,13 +164,6 @@ impl RindaMcpServer {
     }
 
     #[tool(
-        description = "Return the browser login URL and instructions to authenticate with RINDA. Use this when not logged in."
-    )]
-    async fn rinda_auth_login(&self, Parameters(_): Parameters<EmptyParams>) -> String {
-        tools::auth::auth_login().await
-    }
-
-    #[tool(
         description = "Start an async buyer search. Returns sessionId for polling. Params: industry, countries (comma-separated codes), buyer_type, min_revenue (USD), limit."
     )]
     async fn rinda_buyer_search(
