@@ -98,7 +98,7 @@ async fn test_initialize_and_list_tools_http() {
     let (port, mut child) = spawn_binary_server().await;
 
     let client = reqwest::Client::new();
-    let base = format!("http://127.0.0.1:{port}/mcp");
+    let base = format!("http://127.0.0.1:{port}");
 
     // ── 1. Send initialize request ────────────────────────────────────────────
     let init_body = serde_json::json!({
