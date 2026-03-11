@@ -243,12 +243,12 @@ async fn test_initialize_and_list_tools_http() {
     let tool_list = tools.as_array().unwrap();
     assert_eq!(
         tool_list.len(),
-        14,
-        "tools list should have 14 tools, got: {}",
+        16,
+        "tools list should have 16 tools, got: {}",
         tool_list.len()
     );
 
-    // Verify all 14 expected tool names are present
+    // Verify all 16 expected tool names are present
     let tool_names: Vec<&str> = tool_list
         .iter()
         .filter_map(|t| t["name"].as_str())
@@ -262,6 +262,7 @@ async fn test_initialize_and_list_tools_http() {
         "rinda_buyer_select",
         "rinda_buyer_enrich",
         "rinda_buyer_clarify",
+        "rinda_buyer_messages",
         "rinda_campaign_stats",
         "rinda_email_send",
         "rinda_reply_check",
@@ -269,6 +270,7 @@ async fn test_initialize_and_list_tools_http() {
         "rinda_sequence_list",
         "rinda_sequence_generate",
         "rinda_sequence_add_contact",
+        "rinda_order_history",
     ];
 
     for expected in &expected_tools {
