@@ -50,6 +50,7 @@ The following MCP tools are available:
 | `rinda_sequence_list` | List existing email sequences |
 | `rinda_sequence_generate` | AI-generate email steps for a sequence |
 | `rinda_sequence_add_contact` | Enroll a lead into an email sequence |
+| `rinda_workspace_list` | List workspaces for the authenticated user |
 
 The MCP server binary (`rinda-mcp`) is installed to `~/.rinda/bin/rinda-mcp` by the session-start install hook alongside `rinda-cli`. Auth is handled via `~/.rinda/credentials.json` — no additional configuration needed.
 

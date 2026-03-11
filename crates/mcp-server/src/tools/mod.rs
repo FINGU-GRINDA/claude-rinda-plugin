@@ -5,3 +5,4 @@ pub mod email;
 pub mod order;
 pub mod reply;
 pub mod sequence;
+pub mod workspace;
