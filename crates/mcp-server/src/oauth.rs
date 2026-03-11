@@ -372,11 +372,8 @@ pub async fn authorize(
 
 #[derive(Debug, Deserialize)]
 pub struct CallbackParams {
-    /// RINDA JWT token sent back by /cli-auth after user authenticates.
+    /// RINDA refresh token sent back by /cli-auth after user authenticates.
     pub token: Option<String>,
-    /// Google OAuth code (kept for backwards compatibility; not used in new flow).
-    #[allow(dead_code)]
-    pub code: Option<String>,
     pub state: Option<String>,
     pub error: Option<String>,
 }
@@ -393,18 +390,6 @@ pub async fn oauth_callback(
         )
             .into_response();
     }
-
-    // Extract the RINDA JWT token sent back by /cli-auth.
-    let access_token = match &params.token {
-        Some(t) => t.clone(),
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                "Missing token in callback (expected RINDA JWT from /cli-auth)",
-            )
-                .into_response();
-        }
-    };
 
     let csrf_token = match &params.state {
         Some(s) => s.clone(),
@@ -430,40 +415,55 @@ pub async fn oauth_callback(
         return (StatusCode::BAD_REQUEST, "State parameter has expired").into_response();
     }
 
-    // Validate the RINDA token by calling GET /api/v1/auth/me with Bearer auth.
-    // Build a reqwest client with the Authorization header pre-set.
-    let auth_value = format!("Bearer {access_token}");
-    let mut headers = reqwest::header::HeaderMap::new();
-    match reqwest::header::HeaderValue::from_str(&auth_value) {
-        Ok(hv) => {
-            headers.insert(reqwest::header::AUTHORIZATION, hv);
-        }
-        Err(_) => {
-            return (StatusCode::BAD_REQUEST, "Token contains invalid characters").into_response();
-        }
-    }
-    let reqwest_client = match reqwest::Client::builder().default_headers(headers).build() {
-        Ok(c) => c,
-        Err(e) => {
+    // Extract the refresh token from /cli-auth and exchange for access + refresh tokens.
+    let refresh_token = match &params.token {
+        Some(t) => t.clone(),
+        None => {
             return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to build HTTP client: {e}"),
+                StatusCode::BAD_REQUEST,
+                "Missing token in callback (expected refresh token from /cli-auth)",
             )
                 .into_response();
         }
     };
-    let sdk_client = rinda_sdk::Client::new_with_client(&state.base_url, reqwest_client);
-    if let Err(e) = sdk_client.get_api_v1_auth_me().await {
-        return (
-            StatusCode::BAD_GATEWAY,
-            format!("Invalid or expired RINDA token: {e}"),
-        )
-            .into_response();
-    }
 
-    // /cli-auth does not provide a refresh token; use an empty string.
-    // The opaque refresh token flow will fail gracefully at the RINDA backend.
-    let rinda_refresh_token = String::new();
+    let client = rinda_sdk::Client::new(&state.base_url);
+    let body = rinda_sdk::types::PostApiV1AuthRefreshBody {
+        refresh_token: refresh_token.clone(),
+    };
+    let rinda_resp = match client.post_api_v1_auth_refresh(&body).await {
+        Ok(resp) => resp.into_inner(),
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                format!("Failed to exchange refresh token with RINDA backend: {e}"),
+            )
+                .into_response();
+        }
+    };
+
+    let data = rinda_resp
+        .get("data")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_else(|| rinda_resp.clone().into_iter().collect());
+
+    let access_token = match data.get("token").and_then(|v| v.as_str()) {
+        Some(t) => t.to_string(),
+        None => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                "RINDA backend did not return an access token from refresh",
+            )
+                .into_response();
+        }
+    };
+
+    let rinda_refresh_token = data
+        .get("refreshToken")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .unwrap_or(refresh_token);
 
     // Generate a short-lived authorization code.
     let auth_code = Uuid::new_v4().to_string();
@@ -1510,7 +1510,6 @@ mod tests {
         let params: CallbackParams = serde_urlencoded::from_str(qs).unwrap();
         assert_eq!(params.token.as_deref(), Some("rinda-jwt-abc"));
         assert_eq!(params.state.as_deref(), Some("csrf-123"));
-        assert!(params.code.is_none());
         assert!(params.error.is_none());
     }
 
@@ -1526,12 +1525,12 @@ mod tests {
         );
     }
 
-    /// Acceptance criteria: CallbackParams backwards compat — code field is preserved (issue #107).
+    /// Acceptance criteria: CallbackParams ignores unknown fields like code (issue #107).
     #[test]
-    fn test_callback_params_keeps_code_field_for_backwards_compat() {
-        let qs = "code=google-code-xyz&state=csrf-123";
+    fn test_callback_params_ignores_unknown_fields() {
+        // `code` is not in the struct; serde should ignore it by default.
+        let qs = "state=csrf-123";
         let params: CallbackParams = serde_urlencoded::from_str(qs).unwrap();
-        // code is kept in struct (for backwards compat) but unused in new flow.
         assert!(params.token.is_none());
         assert_eq!(params.state.as_deref(), Some("csrf-123"));
     }
