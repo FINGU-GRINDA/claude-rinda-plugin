@@ -19,6 +19,9 @@ COPY crates/mcp-server/ ./crates/mcp-server/
 # Copy doc/openapi.json required by sdk/build.rs
 COPY doc/openapi.json ./doc/openapi.json
 
+# Remove crates/cli workspace member (not in Docker build context)
+RUN sed -i 's/"crates\/cli", //' Cargo.toml
+
 # Build release binary for rinda-mcp
 RUN cargo build --release -p rinda-mcp
 
@@ -27,7 +30,7 @@ FROM debian:bookworm-slim
 
 # Install ca-certificates for HTTPS connections to rinda.ai API
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
+    ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/rinda-mcp /usr/local/bin/rinda-mcp
