@@ -4,34 +4,20 @@ use uuid::Uuid;
 
 use crate::auth::{AuthContext, json_to_text, sdk_client};
 
-/// Start an async buyer search. Returns session_id and initial status.
-pub async fn buyer_search(
-    auth: &AuthContext,
+/// Build the natural-language query string from filter params.
+fn build_search_query(
     industry: Option<String>,
     countries: Option<String>,
     buyer_type: Option<String>,
     min_revenue: Option<f64>,
     limit: Option<u32>,
 ) -> String {
-    let client = sdk_client(Some(&auth.access_token));
-
-    let workspace_id = match auth.workspace_id.parse::<Uuid>() {
-        Ok(u) => u,
-        Err(_) => {
-            return serde_json::json!({
-                "error": "Invalid workspace ID in token. Please re-authenticate."
-            })
-            .to_string();
-        }
-    };
-
-    // Build the query from available filters.
     let mut parts: Vec<String> = Vec::new();
     if let Some(ind) = industry {
         parts.push(ind);
     }
-    if let Some(countries) = countries {
-        parts.push(format!("countries:{countries}"));
+    if let Some(c) = countries {
+        parts.push(format!("countries:{c}"));
     }
     if let Some(bt) = buyer_type {
         parts.push(format!("type:{bt}"));
@@ -42,25 +28,152 @@ pub async fn buyer_search(
     if let Some(lim) = limit {
         parts.push(format!("limit:{lim}"));
     }
-    let query = if parts.is_empty() {
+    if parts.is_empty() {
         "buyer search".to_string()
     } else {
         parts.join(" ")
+    }
+}
+
+/// Start an async buyer search via SSE endpoint. Returns session_id and initial status.
+///
+/// The `/lead-discovery/search` endpoint is SSE-streaming. We POST with
+/// `Accept: text/event-stream`, read events until we get a session_id or
+/// terminal state, then return the collected info as JSON.
+pub async fn buyer_search(
+    auth: &AuthContext,
+    industry: Option<String>,
+    countries: Option<String>,
+    buyer_type: Option<String>,
+    min_revenue: Option<f64>,
+    limit: Option<u32>,
+) -> String {
+    let workspace_id = match auth.workspace_id.parse::<Uuid>() {
+        Ok(u) => u,
+        Err(_) => {
+            return serde_json::json!({
+                "error": "Invalid workspace ID in token. Please re-authenticate."
+            })
+            .to_string();
+        }
     };
 
-    let body = rinda_sdk::types::PostApiV1LeadDiscoverySearchBody {
-        query,
-        workspace_id,
-        crawl_timeout_seconds: None,
-        locale: None,
-        session_id: None,
-        use_auto_timeout: true,
-    };
+    let query = build_search_query(industry, countries, buyer_type, min_revenue, limit);
 
-    match client.post_api_v1_lead_discovery_search(&body).await {
-        Ok(resp) => json_to_text(&resp.into_inner()),
+    let body = serde_json::json!({
+        "query": query,
+        "workspaceId": workspace_id,
+        "useAutoTimeout": true,
+    });
+
+    match sse_search_request(&auth.access_token, &body).await {
+        Ok(result) => serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".to_string()),
         Err(e) => serde_json::json!({ "error": format!("buyer search failed: {e}") }).to_string(),
     }
+}
+
+/// Perform the SSE POST request to `/lead-discovery/search` and collect events
+/// until a session_id is obtained or the stream ends / times out.
+async fn sse_search_request(
+    access_token: &str,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    use futures_util::StreamExt;
+
+    let base = rinda_common::config::base_url();
+    let url = format!("{base}/api/v1/lead-discovery/search");
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {access_token}"))
+        .header("Accept", "text/event-stream")
+        .header("Content-Type", "application/json")
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP request failed: {e}"))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("HTTP {status}: {text}"));
+    }
+
+    // Read SSE events from the response stream.
+    let mut stream = resp.bytes_stream();
+    let mut session_id: Option<String> = None;
+    let mut last_status: Option<String> = None;
+    let mut last_data: Option<serde_json::Value> = None;
+    let mut buf = String::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("stream read error: {e}"))?;
+        buf.push_str(&String::from_utf8_lossy(&chunk));
+
+        // Process complete SSE events (delimited by double newline).
+        while let Some(pos) = buf.find("\n\n") {
+            let event_block = buf[..pos].to_string();
+            buf = buf[pos + 2..].to_string();
+
+            for line in event_block.lines() {
+                if let Some(data_str) = line
+                    .strip_prefix("data: ")
+                    .or_else(|| line.strip_prefix("data:"))
+                {
+                    let data_str = data_str.trim();
+                    if data_str == "[DONE]" {
+                        // Stream finished.
+                        break;
+                    }
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data_str) {
+                        // Extract session_id from various possible field names.
+                        if session_id.is_none() {
+                            session_id = parsed
+                                .get("sessionId")
+                                .or_else(|| parsed.get("session_id"))
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+                        }
+                        if let Some(s) = parsed.get("status").and_then(|v| v.as_str()) {
+                            last_status = Some(s.to_string());
+                        }
+                        last_data = Some(parsed);
+                    }
+                }
+            }
+        }
+
+        // Once we have a session_id, we can return early.
+        // The caller can poll for progress with buyer_status.
+        if session_id.is_some() && last_status.is_some() {
+            break;
+        }
+    }
+
+    // Build the result.
+    let mut result = serde_json::json!({});
+    if let Some(sid) = &session_id {
+        result["sessionId"] = serde_json::json!(sid);
+    }
+    if let Some(st) = &last_status {
+        result["status"] = serde_json::json!(st);
+    }
+    if let Some(data) = last_data {
+        result["lastEvent"] = data;
+    }
+
+    if session_id.is_none() {
+        result["warning"] = serde_json::json!(
+            "No session_id received from SSE stream. The search may not have started."
+        );
+    } else {
+        result["hint"] = serde_json::json!(
+            "Use buyer_status with the sessionId to poll for progress, then buyer_results to get the final results."
+        );
+    }
+
+    Ok(result)
 }
 
 /// Poll the status of an async buyer search session.
