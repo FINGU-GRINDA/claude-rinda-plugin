@@ -1,0 +1,15 @@
+{
+  "preferences": {
+    "coworkWebSearchEnabled": true,
+    "coworkScheduledTasksEnabled": true,
+    "ccdScheduledTasksEnabled": true
+  },
+  "mcpServers": {
+    "rinda-alpha": {
+      "url": "https://rindamcp-remotemcpserver-q9ffxo-ba7343-192-3-155-238.sslip.io/mcp/"
+    },
+    "rinda-beta": {
+      "url": "https://YOUR_BETA_MCP_DOMAIN/mcp/"
+    }
+  }
+}
