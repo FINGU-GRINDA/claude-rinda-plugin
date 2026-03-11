@@ -405,13 +405,13 @@ async fn sse_search(
         result["lastEvent"] = data;
     }
 
-    if session_id.is_none() {
+    if let Some(sid) = &session_id {
+        println!("Search session started: {sid}");
+        println!("Use `rinda buyer status --session-id <id>` to check progress.");
+    } else {
         result["warning"] = serde_json::json!(
             "No session_id received from SSE stream. The search may not have started."
         );
-    } else {
-        println!("Search session started: {}", session_id.as_ref().unwrap());
-        println!("Use `rinda buyer status --session-id <id>` to check progress.");
     }
 
     Ok(result)
