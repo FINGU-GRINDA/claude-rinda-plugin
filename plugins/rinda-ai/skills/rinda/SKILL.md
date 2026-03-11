@@ -37,6 +37,7 @@ The following MCP tools are available:
 |------|-------------|
 | `rinda_auth_status` | Return current authentication status |
 | `rinda_auth_login` | Return browser login URL and instructions |
+| `rinda_workspace_list` | List workspaces the authenticated user belongs to |
 | `rinda_buyer_search` | Start an async buyer search, returns sessionId |
 | `rinda_buyer_status` | Poll status of an async search session |
 | `rinda_buyer_results` | Get results of a completed search session |
