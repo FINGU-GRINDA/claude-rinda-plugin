@@ -125,6 +125,122 @@ struct OrderHistoryParams {
     days_inactive: Option<u32>,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct LeadSearchParams {
+    #[schemars(description = "Business type filter (e.g. \"manufacturer\")")]
+    business_type: Option<String>,
+    #[schemars(description = "City filter")]
+    city: Option<String>,
+    #[schemars(description = "Country filter (e.g. \"US\")")]
+    country: Option<String>,
+    #[schemars(description = "Customer group ID filter")]
+    customer_group_id: Option<String>,
+    #[schemars(
+        description = "Lead status filter (new|contacted|qualified|unqualified|converted|lost|unsubscribed)"
+    )]
+    lead_status: Option<String>,
+    #[schemars(description = "Search query string")]
+    search: Option<String>,
+    #[schemars(description = "Search type (all|company|country|email|website|industry|category)")]
+    search_type: Option<String>,
+    #[schemars(description = "Sort field")]
+    sort_field: Option<String>,
+    #[schemars(description = "Sort order (asc|desc)")]
+    sort_order: Option<String>,
+    #[schemars(description = "Maximum number of results")]
+    limit: Option<String>,
+    #[schemars(description = "Pagination offset")]
+    offset: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct LeadIdParams {
+    #[schemars(description = "Lead UUID")]
+    id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct LeadCreateParams {
+    #[schemars(description = "Company name")]
+    company_name: Option<String>,
+    #[schemars(description = "Website URL")]
+    website_url: Option<String>,
+    #[schemars(description = "Country")]
+    country: Option<String>,
+    #[schemars(description = "City")]
+    city: Option<String>,
+    #[schemars(description = "Business type")]
+    business_type: Option<String>,
+    #[schemars(description = "Contact name")]
+    contact_name: Option<String>,
+    #[schemars(
+        description = "Lead status (new|contacted|qualified|unqualified|converted|lost|unsubscribed)"
+    )]
+    lead_status: Option<String>,
+    #[schemars(description = "Description")]
+    description: Option<String>,
+    #[schemars(description = "Notes")]
+    notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct LeadUpdateParams {
+    #[schemars(description = "Lead UUID")]
+    id: String,
+    #[schemars(description = "Company name")]
+    company_name: Option<String>,
+    #[schemars(description = "Website URL")]
+    website_url: Option<String>,
+    #[schemars(description = "Country")]
+    country: Option<String>,
+    #[schemars(description = "City")]
+    city: Option<String>,
+    #[schemars(description = "Business type")]
+    business_type: Option<String>,
+    #[schemars(description = "Contact name")]
+    contact_name: Option<String>,
+    #[schemars(
+        description = "Lead status (new|contacted|qualified|unqualified|converted|lost|unsubscribed)"
+    )]
+    lead_status: Option<String>,
+    #[schemars(description = "Description")]
+    description: Option<String>,
+    #[schemars(description = "Notes")]
+    notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct LeadByStatusParams {
+    #[schemars(
+        description = "Lead status (new|contacted|qualified|unqualified|converted|lost|unsubscribed)"
+    )]
+    status: String,
+    #[schemars(description = "Maximum number of results")]
+    limit: Option<String>,
+    #[schemars(description = "Pagination offset")]
+    offset: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct LeadTopParams {
+    #[schemars(description = "Customer group ID filter")]
+    customer_group_id: Option<String>,
+    #[schemars(description = "Maximum number of results")]
+    limit: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct LeadByTierParams {
+    #[schemars(description = "Assessment tier (e.g. \"A\", \"B\", \"C\")")]
+    tier: String,
+    #[schemars(description = "Customer group ID filter")]
+    customer_group_id: Option<String>,
+    #[schemars(description = "Maximum number of results")]
+    limit: Option<String>,
+    #[schemars(description = "Pagination offset")]
+    offset: Option<String>,
+}
+
 // ── Server struct ────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -399,6 +515,153 @@ impl RindaMcpServer {
     ) -> String {
         let auth = require_auth!(parts);
         tools::workspace::workspace_list(&auth).await
+    }
+
+    #[tool(
+        description = "Search leads with advanced filtering. Params: business_type, city, country, customer_group_id, lead_status, search, search_type (all|company|country|email|website|industry|category), sort_field, sort_order (asc|desc), limit, offset."
+    )]
+    async fn rinda_lead_search(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<LeadSearchParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::lead::lead_search(
+            &auth,
+            p.business_type,
+            p.city,
+            p.country,
+            p.customer_group_id,
+            p.lead_status,
+            p.search,
+            p.search_type,
+            p.sort_field,
+            p.sort_order,
+            p.limit,
+            p.offset,
+        )
+        .await
+    }
+
+    #[tool(description = "Get a lead by its UUID. Param: id (lead UUID).")]
+    async fn rinda_lead_get(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<LeadIdParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::lead::lead_get(&auth, p.id).await
+    }
+
+    #[tool(
+        description = "Create a new lead. Params: company_name, website_url, country, city, business_type, contact_name, lead_status (new|contacted|qualified|unqualified|converted|lost|unsubscribed), description, notes."
+    )]
+    async fn rinda_lead_create(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<LeadCreateParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::lead::lead_create(
+            &auth,
+            p.company_name,
+            p.website_url,
+            p.country,
+            p.city,
+            p.business_type,
+            p.contact_name,
+            p.lead_status,
+            p.description,
+            p.notes,
+        )
+        .await
+    }
+
+    #[tool(
+        description = "Update an existing lead. Params: id (UUID, required), plus any of: company_name, website_url, country, city, business_type, contact_name, lead_status (new|contacted|qualified|unqualified|converted|lost|unsubscribed), description, notes."
+    )]
+    async fn rinda_lead_update(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<LeadUpdateParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::lead::lead_update(
+            &auth,
+            p.id,
+            p.company_name,
+            p.website_url,
+            p.country,
+            p.city,
+            p.business_type,
+            p.contact_name,
+            p.lead_status,
+            p.description,
+            p.notes,
+        )
+        .await
+    }
+
+    #[tool(description = "Delete a lead by UUID. Param: id (lead UUID).")]
+    async fn rinda_lead_delete(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<LeadIdParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::lead::lead_delete(&auth, p.id).await
+    }
+
+    #[tool(
+        description = "List leads filtered by status. Params: status (new|contacted|qualified|unqualified|converted|lost|unsubscribed, required), limit, offset."
+    )]
+    async fn rinda_lead_by_status(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<LeadByStatusParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::lead::lead_by_status(&auth, p.status, p.limit, p.offset).await
+    }
+
+    #[tool(
+        description = "Get top-scored leads from AI assessment. Params: customer_group_id (optional), limit (optional). Uses workspace from token."
+    )]
+    async fn rinda_lead_top(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<LeadTopParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::lead::lead_top(&auth, p.customer_group_id, p.limit).await
+    }
+
+    #[tool(
+        description = "Get leads grouped by assessment tier. Params: tier (required, e.g. \"A\", \"B\", \"C\"), customer_group_id, limit, offset. Uses workspace from token."
+    )]
+    async fn rinda_lead_by_tier(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<LeadByTierParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::lead::lead_by_tier(&auth, p.tier, p.customer_group_id, p.limit, p.offset).await
     }
 }
 
