@@ -117,7 +117,10 @@ async fn sse_search_request(
             buf = buf[pos + 2..].to_string();
 
             for line in event_block.lines() {
-                if let Some(data_str) = line.strip_prefix("data: ").or_else(|| line.strip_prefix("data:")) {
+                if let Some(data_str) = line
+                    .strip_prefix("data: ")
+                    .or_else(|| line.strip_prefix("data:"))
+                {
                     let data_str = data_str.trim();
                     if data_str == "[DONE]" {
                         // Stream finished.
