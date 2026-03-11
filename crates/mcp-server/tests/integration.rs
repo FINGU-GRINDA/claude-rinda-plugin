@@ -243,12 +243,12 @@ async fn test_initialize_and_list_tools_http() {
     let tool_list = tools.as_array().unwrap();
     assert_eq!(
         tool_list.len(),
-        25,
-        "tools list should have 25 tools, got: {}",
+        34,
+        "tools list should have 34 tools, got: {}",
         tool_list.len()
     );
 
-    // Verify all 25 expected tool names are present
+    // Verify all 34 expected tool names are present
     let tool_names: Vec<&str> = tool_list
         .iter()
         .filter_map(|t| t["name"].as_str())
@@ -281,6 +281,16 @@ async fn test_initialize_and_list_tools_http() {
         "rinda_lead_by_status",
         "rinda_lead_top",
         "rinda_lead_by_tier",
+        // Group management tools
+        "rinda_group_create",
+        "rinda_group_list",
+        "rinda_group_get",
+        "rinda_group_update",
+        "rinda_group_delete",
+        "rinda_group_members",
+        "rinda_group_add_member",
+        "rinda_group_remove_member",
+        "rinda_group_for_lead",
     ];
 
     for expected in &expected_tools {
