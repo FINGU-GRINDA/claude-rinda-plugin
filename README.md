@@ -191,6 +191,58 @@ Tokens refresh automatically. Only re-authenticate if unused for 14+ days.
 
 ---
 
+## Docker / Deployment
+
+### Local Development
+
+```bash
+# 1. Copy and edit environment variables
+cp .env.example .env
+
+# 2. Build and start the MCP server
+docker compose up
+```
+
+The server will be available at `http://localhost:3000`. Verify with:
+
+```bash
+curl http://localhost:3000/health
+# {"status":"ok"}
+```
+
+### Build the Docker Image
+
+```bash
+docker build -t rinda-mcp .
+docker run -p 3000:3000 \
+  -e RINDA_API_BASE_URL=https://alpha.rinda.ai \
+  -e MCP_SERVER_URL=http://localhost:3000 \
+  rinda-mcp
+```
+
+### Dokploy Deployment
+
+1. **Create Application** — In your Dokploy dashboard, create a new Application and point it at this repository.
+
+2. **Set build type to Dockerfile** — Dokploy will use the `Dockerfile` at the repository root.
+
+3. **Configure environment variables** — Set the following in the Dokploy environment panel:
+
+   | Variable | Example value | Description |
+   |---|---|---|
+   | `PORT` | `3000` | Port the server listens on |
+   | `RUST_LOG` | `info` | Log level (`error`, `warn`, `info`, `debug`) |
+   | `RINDA_API_BASE_URL` | `https://app.rinda.ai` | RINDA API backend (use `app` for production) |
+   | `MCP_SERVER_URL` | `https://mcp.rinda.ai` | Public URL of this server (used in OAuth callbacks) |
+
+4. **Configure health check** — Set the health check endpoint to `GET /health`.
+
+5. **Configure domain** — Assign a domain (e.g. `mcp.rinda.ai`) and enable HTTPS. Update `MCP_SERVER_URL` to match.
+
+6. **Deploy** — Trigger a deploy. Dokploy will build the multi-stage Docker image, run the container, and confirm health before routing traffic.
+
+---
+
 ## Support
 
 - Website: [rinda.ai](https://rinda.ai)
