@@ -419,8 +419,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/oauth/token", axum::routing::post(oauth::token))
         .route("/oauth/register", axum::routing::post(oauth::register))
         .with_state(oauth_state.clone())
-        .nest_service(
-            "/mcp",
+        .fallback_service(
             tower::ServiceBuilder::new()
                 .layer(axum::middleware::from_fn_with_state(
                     oauth_state,
