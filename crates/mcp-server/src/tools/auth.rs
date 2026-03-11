@@ -1,7 +1,5 @@
 // Auth tool implementations: rinda_auth_status, rinda_auth_login.
 
-use rinda_common::config::base_url;
-
 use crate::auth;
 
 /// Implementation for the rinda_auth_status tool.
@@ -81,12 +79,15 @@ pub async fn auth_status(parts: Option<&http::request::Parts>) -> String {
 }
 
 /// Implementation for the rinda_auth_login tool.
-/// Returns the browser login URL and instructions.
+/// Returns instructions for authenticating via the MCP OAuth 2.0 flow.
+/// Authentication is handled automatically by the MCP client (e.g. Claude Desktop)
+/// through the server's OAuth endpoints.
 pub async fn auth_login() -> String {
-    let url = format!("{}/cli-auth", base_url());
+    let server_url = std::env::var("MCP_SERVER_URL")
+        .unwrap_or_else(|_| "http://localhost:3000".to_string());
     serde_json::json!({
-        "auth_url": url,
-        "instructions": "Open the URL in your browser, complete Google login, then copy the refresh token and run: rinda auth token <TOKEN>"
+        "auth_url": format!("{}/oauth/authorize", server_url),
+        "instructions": "Authentication is handled automatically by your MCP client via OAuth 2.0. If you are not authenticated, your client should redirect you to sign in with Google. You can also check your auth status using the rinda_auth_status tool."
     })
     .to_string()
 }
@@ -105,10 +106,9 @@ mod tests {
 
         let url = parsed["auth_url"].as_str().expect("should have auth_url");
         assert!(
-            url.contains("cli-auth"),
-            "auth URL should contain 'cli-auth'"
+            url.contains("/oauth/authorize"),
+            "auth URL should contain '/oauth/authorize'"
         );
-        assert!(url.starts_with("https://"), "auth URL should be HTTPS");
 
         let instructions = parsed["instructions"]
             .as_str()
