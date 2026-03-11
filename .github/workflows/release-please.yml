@@ -34,11 +34,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
+          - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             artifact: rinda-cli-linux-x64
             mcp_artifact: rinda-mcp-linux-x64
-          - target: aarch64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             artifact: rinda-cli-linux-arm64
             mcp_artifact: rinda-mcp-linux-arm64
@@ -68,11 +68,17 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross-compilation tools (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+      - name: Install musl-tools (Linux x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y musl-tools
+
+      - name: Install cross-compilation tools (Linux ARM64 musl)
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -82,12 +88,12 @@ jobs:
       - name: Build release binary (rinda-cli)
         run: cargo build --release --target ${{ matrix.target }} -p rinda-cli
         env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
 
       - name: Build release binary (rinda-mcp)
         run: cargo build --release --target ${{ matrix.target }} -p rinda-mcp
         env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
 
       - name: Rename binary (Unix)
         if: runner.os != 'Windows'
