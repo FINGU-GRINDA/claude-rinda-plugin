@@ -17,6 +17,8 @@ enum Commands {
     Auth(commands::auth::AuthArgs),
     /// Buyer (lead) discovery and enrichment commands
     Buyer(commands::buyer::BuyerArgs),
+    /// Customer group CRUD and member management commands
+    Group(commands::group::GroupArgs),
     /// Campaign statistics commands
     Campaign(commands::campaign::CampaignArgs),
     /// Configuration commands
@@ -42,6 +44,7 @@ async fn main() {
     match cli.command {
         Commands::Auth(args) => commands::auth::run(args).await,
         Commands::Buyer(args) => commands::buyer::run(args).await,
+        Commands::Group(args) => commands::group::run(args).await,
         Commands::Campaign(args) => commands::campaign::run(args).await,
         Commands::Config(args) => commands::config::run(args).await,
         Commands::Email(args) => commands::email::run(args).await,
