@@ -32,6 +32,13 @@ pub struct AuthContext {
 /// - The JWT payload cannot be base64-decoded.
 /// - The JWT payload is not valid JSON.
 pub fn extract_auth_from_parts(parts: &http::request::Parts) -> Result<AuthContext, String> {
+    // First check if the OAuth middleware injected an AuthenticatedToken.
+    // This contains the real RINDA JWT (resolved from the opaque session token).
+    if let Some(authenticated) = parts.extensions.get::<crate::oauth::AuthenticatedToken>() {
+        return extract_auth_context_from_jwt(&authenticated.0);
+    }
+
+    // Fall back to reading the raw Authorization Bearer header (direct JWT).
     let auth_header = parts
         .headers
         .get(http::header::AUTHORIZATION)
