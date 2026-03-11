@@ -14,12 +14,16 @@ Tested on 2026-03-10 against `alpha.rinda.ai`.
 | `campaign stats` | `GET /api/v1/dashboard/stats` | GET | Params: `startDate`, `endDate`. Returns lead/email/open-rate stats. |
 | `reply check` | `GET /api/v1/email-replies` | GET | Params: `limit`, `offset`, `isRead`, `sentiment`, etc. Returns reply list. |
 | `order history` | `GET /api/v1/leads/search` | GET | Many filter params. Returns paginated lead list. Works as order-history approximation. |
+| `buyer sessions` | `GET /api/v1/lead-discovery/db/sessions` | GET | Lists past search sessions for a workspace. Params: `workspaceId` (required), `userId` (optional). |
+| `buyer status` | `GET /api/v1/lead-discovery/db/sessions/{sessionId}` | GET | Returns session detail with status, progress, query. |
+| `buyer results` | `GET /api/v1/lead-discovery/db/sessions/{sessionId}/results` | GET | Returns search results for a completed session. |
+| `buyer messages` | `GET /api/v1/lead-discovery/db/sessions/{sessionId}/messages` | GET | Returns clarification messages for a session. |
 
 ## Broken
 
 | CLI Command | API Endpoint | Method | Issue |
 |---|---|---|---|
-| `buyer search` | `POST /api/v1/lead-discovery/search` | POST | Returns 422. Endpoint is SSE-streaming conversational AI search. OpenAPI spec has empty `requestBody.content: {}` — no schema. Required fields unknown. |
+| `buyer search` | `POST /api/v1/lead-discovery/search` | POST | SSE-streaming endpoint. Now uses raw reqwest with `Accept: text/event-stream` to consume events and extract session_id. |
 | `buyer enrich` | `POST /api/v1/lead-discovery/enrich` | POST | Untested but likely same issue — empty schema in spec. |
 
 ## Not Tested (Destructive)
