@@ -58,10 +58,17 @@ impl RindaConfig {
 }
 
 /// Resolve the base URL from config.
+/// Priority: RINDA_API_BASE_URL env var > config file > default (https://app.rinda.ai)
 /// "alpha" → https://alpha.rinda.ai, "beta" (default) → https://app.rinda.ai
 pub fn base_url() -> &'static str {
     static URL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     URL.get_or_init(|| {
+        // Environment variable takes precedence over config file
+        if let Ok(url) = std::env::var("RINDA_API_BASE_URL")
+            && !url.is_empty()
+        {
+            return url;
+        }
         let config = RindaConfig::load();
         match config.env.as_str() {
             "alpha" => "https://alpha.rinda.ai".to_string(),
