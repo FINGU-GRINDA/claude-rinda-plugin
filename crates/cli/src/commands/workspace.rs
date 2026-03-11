@@ -30,3 +30,47 @@ pub async fn run(args: WorkspaceArgs) {
 
     process::exit(0);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    /// Wrapper CLI used only in tests so we can parse `workspace list` args
+    /// without requiring the full top-level `Cli` struct.
+    #[derive(Debug, Parser)]
+    struct TestCli {
+        #[command(subcommand)]
+        command: WorkspaceCommands,
+    }
+
+    /// Acceptance criteria: `rinda workspace list` should be a valid subcommand.
+    /// Verifies that clap accepts "list" and maps it to `WorkspaceCommands::List`.
+    #[test]
+    fn workspace_list_parses_to_list_variant() {
+        let cli = TestCli::try_parse_from(["workspace", "list"])
+            .expect("'workspace list' should parse successfully");
+        assert!(
+            matches!(cli.command, WorkspaceCommands::List),
+            "expected WorkspaceCommands::List variant"
+        );
+    }
+
+    #[test]
+    fn workspace_list_rejects_unknown_subcommand() {
+        let result = TestCli::try_parse_from(["workspace", "unknown"]);
+        assert!(
+            result.is_err(),
+            "unknown subcommand should produce a parse error"
+        );
+    }
+
+    #[test]
+    fn workspace_list_rejects_no_subcommand() {
+        let result = TestCli::try_parse_from(["workspace"]);
+        assert!(
+            result.is_err(),
+            "missing subcommand should produce a parse error"
+        );
+    }
+}
