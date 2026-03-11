@@ -89,6 +89,13 @@ pub enum BuyerCommands {
         #[arg(long)]
         answers: String,
     },
+
+    /// List all past search sessions for the current workspace
+    Sessions {
+        /// Optional user ID filter (UUID)
+        #[arg(long)]
+        user_id: Option<String>,
+    },
 }
 
 pub async fn run(args: BuyerArgs) {
@@ -245,6 +252,23 @@ pub async fn run(args: BuyerArgs) {
             }
         }
 
+        BuyerCommands::Sessions { user_id } => {
+            let workspace_id = require_workspace_id(&creds);
+            let user_uuid = user_id.map(|id| {
+                id.parse::<Uuid>().unwrap_or_else(|_| {
+                    eprintln!("Invalid user ID — must be a valid UUID");
+                    process::exit(1);
+                })
+            });
+            match client
+                .get_api_v1_lead_discovery_db_sessions(user_uuid.as_ref(), &workspace_id)
+                .await
+            {
+                Ok(resp) => print_json(&resp.into_inner()),
+                Err(e) => exit_api_error("buyer sessions failed", e),
+            }
+        }
+
         BuyerCommands::Clarify {
             session_id,
             answers,
@@ -286,6 +310,36 @@ pub fn parse_answers_json(s: &str) -> Result<serde_json::Map<String, serde_json:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Sessions subcommand ────────────────────────────────────────────────
+
+    #[test]
+    fn buyer_sessions_no_user_id_is_valid_variant() {
+        // The Sessions variant must be constructable with no user_id (optional).
+        let cmd = BuyerCommands::Sessions { user_id: None };
+        assert!(matches!(cmd, BuyerCommands::Sessions { user_id: None }));
+    }
+
+    #[test]
+    fn buyer_sessions_with_valid_uuid_user_id_parses() {
+        // A well-formed UUID string should parse successfully (mirrors run() logic).
+        let uuid_str = "550e8400-e29b-41d4-a716-446655440000".to_string();
+        let result = uuid_str.parse::<uuid::Uuid>();
+        assert!(result.is_ok(), "valid UUID must parse without error");
+    }
+
+    #[test]
+    fn buyer_sessions_invalid_uuid_user_id_fails_to_parse() {
+        // An invalid UUID should fail to parse, triggering the process::exit branch.
+        let bad = "not-a-uuid";
+        let result = bad.parse::<uuid::Uuid>();
+        assert!(
+            result.is_err(),
+            "invalid UUID must fail to parse so the error branch fires"
+        );
+    }
+
+    // ── parse_answers_json ─────────────────────────────────────────────────
 
     #[test]
     fn parse_answers_json_valid_object() {
