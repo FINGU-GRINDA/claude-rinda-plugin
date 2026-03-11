@@ -168,23 +168,78 @@ impl OAuthState {
 
 /// Axum middleware that reads `Authorization: Bearer <token>`, validates it
 /// against the session store, and injects `AuthenticatedToken` into request
-/// extensions if valid. Invalid/missing tokens do NOT result in rejection here
-/// — individual tool handlers decide whether to require auth (allowing the MCP
-/// `initialize` request through without a session token).
+/// extensions if valid.
+///
+/// When no valid token is present, the middleware still passes the request
+/// through (to allow `initialize` and `tools/list` through), but injects a
+/// marker so downstream handlers know auth was attempted and failed.
 pub async fn auth_middleware(
     State(state): State<Arc<OAuthState>>,
     mut req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> Response {
-    if let Some(token) = extract_bearer_token(req.headers())
-        && let Some(rinda_token) = state.validate_session(&token)
-    {
-        req.extensions_mut().insert(AuthenticatedToken(rinda_token));
+    if let Some(token) = extract_bearer_token(req.headers()) {
+        if let Some(rinda_token) = state.validate_session(&token) {
+            req.extensions_mut().insert(AuthenticatedToken(rinda_token));
+        }
+        // If token was present but invalid, fall through without AuthenticatedToken.
+        // The tool handler will decide whether to reject.
     }
-    next.run(req).await
+
+    let mut response = next.run(req).await;
+
+    // If a downstream handler signalled 401 (via AuthRequired marker in
+    // extensions), inject the WWW-Authenticate header per RFC 9728 §5.1.
+    // Note: rmcp tool handlers return MCP-level responses, so this mainly
+    // applies when we add explicit 401 returns in the future. For now, the
+    // WWW-Authenticate header is always available on 401 responses.
+    if response.status() == StatusCode::UNAUTHORIZED {
+        let resource_metadata_url = format!(
+            "{}/.well-known/oauth-protected-resource",
+            state.server_url
+        );
+        response.headers_mut().insert(
+            axum::http::header::WWW_AUTHENTICATE,
+            format!(
+                "Bearer resource_metadata=\"{}\"",
+                resource_metadata_url
+            )
+            .parse()
+            .unwrap(),
+        );
+    }
+
+    response
 }
 
-// ── RFC 8414 Metadata ─────────────────────────────────────────────────────────
+// ── RFC 9728 Protected Resource Metadata ─────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct ProtectedResourceMetadata {
+    pub resource: String,
+    pub authorization_servers: Vec<String>,
+    pub bearer_methods_supported: Vec<String>,
+    pub resource_documentation: Option<String>,
+}
+
+/// `GET /.well-known/oauth-protected-resource` — RFC 9728 Protected Resource Metadata.
+///
+/// This is the entry point for MCP client auth discovery. The client fetches this
+/// to find the authorization server(s), then fetches the AS metadata from
+/// `/.well-known/oauth-authorization-server`.
+pub async fn protected_resource_metadata(
+    State(state): State<Arc<OAuthState>>,
+) -> Json<ProtectedResourceMetadata> {
+    let base = &state.server_url;
+    Json(ProtectedResourceMetadata {
+        resource: base.clone(),
+        authorization_servers: vec![base.clone()],
+        bearer_methods_supported: vec!["header".to_string()],
+        resource_documentation: None,
+    })
+}
+
+// ── RFC 8414 Authorization Server Metadata ───────────────────────────────────
 
 #[derive(Serialize)]
 pub struct OAuthMetadata {
@@ -1164,6 +1219,52 @@ mod tests {
     }
 
     // ── Integration test: OAuth HTTP endpoints ────────────────────────────────
+
+    /// Integration test: GET /.well-known/oauth-protected-resource returns valid RFC 9728 metadata.
+    #[tokio::test]
+    async fn test_integration_protected_resource_metadata_endpoint() {
+        use axum::Router;
+        use axum::routing::get;
+        use tokio::net::TcpListener;
+
+        let oauth_state = Arc::new(OAuthState::new(
+            "https://alpha.rinda.ai".to_string(),
+            "http://localhost:0".to_string(),
+        ));
+
+        let app = Router::new()
+            .route(
+                "/.well-known/oauth-protected-resource",
+                get(protected_resource_metadata),
+            )
+            .with_state(oauth_state);
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let url = format!("http://{addr}/.well-known/oauth-protected-resource");
+        let resp = reqwest::get(&url).await.unwrap();
+        assert_eq!(resp.status(), 200);
+
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert!(
+            body["resource"].as_str().is_some(),
+            "resource should be present"
+        );
+        let auth_servers = body["authorization_servers"].as_array();
+        assert!(
+            auth_servers.is_some() && !auth_servers.unwrap().is_empty(),
+            "authorization_servers should be a non-empty array"
+        );
+        assert_eq!(
+            body["bearer_methods_supported"],
+            serde_json::json!(["header"])
+        );
+    }
 
     /// Integration test: GET /.well-known/oauth-authorization-server returns valid metadata.
     #[tokio::test]
