@@ -2,28 +2,24 @@
 
 use uuid::Uuid;
 
-use crate::auth::{get_authenticated_client, json_to_text};
+use crate::auth::{AuthContext, json_to_text, sdk_client};
 
 /// Create a new email sequence.
 pub async fn sequence_create(
+    auth: &AuthContext,
     name: String,
     seq_type: Option<String>,
     steps: Option<String>,
 ) -> String {
     let _ = (seq_type, steps); // currently unused — SDK doesn't expose these directly
 
-    let (client, creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+    let client = sdk_client(Some(&auth.access_token));
 
-    let workspace_id = match creds.workspace_id.parse::<Uuid>() {
+    let workspace_id = match auth.workspace_id.parse::<Uuid>() {
         Ok(u) => u,
         Err(_) => {
             return serde_json::json!({
-                "error": "Invalid workspace ID in credentials. Please log in again."
+                "error": "Invalid workspace ID in token. Please re-authenticate."
             })
             .to_string();
         }
@@ -61,13 +57,12 @@ pub async fn sequence_create(
 }
 
 /// List existing sequences for the workspace.
-pub async fn sequence_list(limit: Option<String>, offset: Option<String>) -> String {
-    let (client, _creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+pub async fn sequence_list(
+    auth: &AuthContext,
+    limit: Option<String>,
+    offset: Option<String>,
+) -> String {
+    let client = sdk_client(Some(&auth.access_token));
 
     match client
         .get_api_v1_sequences(limit.as_deref(), offset.as_deref())
@@ -79,13 +74,8 @@ pub async fn sequence_list(limit: Option<String>, offset: Option<String>) -> Str
 }
 
 /// AI-generate email steps for a sequence.
-pub async fn sequence_generate(id: String) -> String {
-    let (client, _creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+pub async fn sequence_generate(auth: &AuthContext, id: String) -> String {
+    let client = sdk_client(Some(&auth.access_token));
 
     let uuid = match id.parse::<Uuid>() {
         Ok(u) => u,
@@ -111,13 +101,12 @@ pub async fn sequence_generate(id: String) -> String {
 }
 
 /// Enroll a lead/buyer into a sequence.
-pub async fn sequence_add_contact(sequence_id: String, buyer_id: String) -> String {
-    let (client, _creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+pub async fn sequence_add_contact(
+    auth: &AuthContext,
+    sequence_id: String,
+    buyer_id: String,
+) -> String {
+    let client = sdk_client(Some(&auth.access_token));
 
     let seq_uuid = match sequence_id.parse::<Uuid>() {
         Ok(u) => u,

@@ -2,28 +2,24 @@
 
 use uuid::Uuid;
 
-use crate::auth::{get_authenticated_client, json_to_text};
+use crate::auth::{AuthContext, json_to_text, sdk_client};
 
 /// Start an async buyer search. Returns session_id and initial status.
 pub async fn buyer_search(
+    auth: &AuthContext,
     industry: Option<String>,
     countries: Option<String>,
     buyer_type: Option<String>,
     min_revenue: Option<f64>,
     limit: Option<u32>,
 ) -> String {
-    let (client, creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+    let client = sdk_client(Some(&auth.access_token));
 
-    let workspace_id = match creds.workspace_id.parse::<Uuid>() {
+    let workspace_id = match auth.workspace_id.parse::<Uuid>() {
         Ok(u) => u,
         Err(_) => {
             return serde_json::json!({
-                "error": "Invalid workspace ID in credentials. Please log in again."
+                "error": "Invalid workspace ID in token. Please re-authenticate."
             })
             .to_string();
         }
@@ -68,13 +64,8 @@ pub async fn buyer_search(
 }
 
 /// Poll the status of an async buyer search session.
-pub async fn buyer_status(session_id: String) -> String {
-    let (client, _creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+pub async fn buyer_status(auth: &AuthContext, session_id: String) -> String {
+    let client = sdk_client(Some(&auth.access_token));
 
     let uuid = match session_id.parse::<Uuid>() {
         Ok(u) => u,
@@ -94,13 +85,8 @@ pub async fn buyer_status(session_id: String) -> String {
 }
 
 /// Get the results of a completed buyer search session.
-pub async fn buyer_results(session_id: String) -> String {
-    let (client, _creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+pub async fn buyer_results(auth: &AuthContext, session_id: String) -> String {
+    let client = sdk_client(Some(&auth.access_token));
 
     let uuid = match session_id.parse::<Uuid>() {
         Ok(u) => u,
@@ -120,19 +106,18 @@ pub async fn buyer_results(session_id: String) -> String {
 }
 
 /// Save selected leads from a discovery session.
-pub async fn buyer_select(session_id: String, recommendation_id: String) -> String {
-    let (client, creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+pub async fn buyer_select(
+    auth: &AuthContext,
+    session_id: String,
+    recommendation_id: String,
+) -> String {
+    let client = sdk_client(Some(&auth.access_token));
 
-    let workspace_id = match creds.workspace_id.parse::<Uuid>() {
+    let workspace_id = match auth.workspace_id.parse::<Uuid>() {
         Ok(u) => u,
         Err(_) => {
             return serde_json::json!({
-                "error": "Invalid workspace ID in credentials. Please log in again."
+                "error": "Invalid workspace ID in token. Please re-authenticate."
             })
             .to_string();
         }
@@ -151,17 +136,12 @@ pub async fn buyer_select(session_id: String, recommendation_id: String) -> Stri
 }
 
 /// Enrich a buyer/lead with additional data.
-pub async fn buyer_enrich(buyer_id: String) -> String {
-    let (client, creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+pub async fn buyer_enrich(auth: &AuthContext, buyer_id: String) -> String {
+    let client = sdk_client(Some(&auth.access_token));
 
     let body = rinda_sdk::types::PostApiV1LeadDiscoveryEnrichBody {
         website_url: buyer_id,
-        workspace_id: creds.workspace_id.clone(),
+        workspace_id: auth.workspace_id.clone(),
     };
 
     match client.post_api_v1_lead_discovery_enrich(&body).await {
@@ -171,19 +151,14 @@ pub async fn buyer_enrich(buyer_id: String) -> String {
 }
 
 /// Submit clarification answers for a search session in waiting_clarification status.
-pub async fn buyer_clarify(session_id: String, answers: String) -> String {
-    let (client, creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+pub async fn buyer_clarify(auth: &AuthContext, session_id: String, answers: String) -> String {
+    let client = sdk_client(Some(&auth.access_token));
 
-    let workspace_id = match creds.workspace_id.parse::<Uuid>() {
+    let workspace_id = match auth.workspace_id.parse::<Uuid>() {
         Ok(u) => u,
         Err(_) => {
             return serde_json::json!({
-                "error": "Invalid workspace ID in credentials. Please log in again."
+                "error": "Invalid workspace ID in token. Please re-authenticate."
             })
             .to_string();
         }

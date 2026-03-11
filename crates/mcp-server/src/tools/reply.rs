@@ -1,15 +1,10 @@
 // Reply tool implementations: rinda_reply_check.
 
-use crate::auth::{get_authenticated_client, json_to_text};
+use crate::auth::{AuthContext, json_to_text, sdk_client};
 
 /// Get recent email replies.
-pub async fn reply_check(limit: Option<u32>) -> String {
-    let (client, _creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+pub async fn reply_check(auth: &AuthContext, limit: Option<u32>) -> String {
+    let client = sdk_client(Some(&auth.access_token));
 
     let limit_val = limit.unwrap_or(50);
     let limit_str = limit_val.to_string();
