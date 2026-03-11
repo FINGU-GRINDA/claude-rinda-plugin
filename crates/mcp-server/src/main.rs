@@ -418,8 +418,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/oauth/callback", get(oauth::oauth_callback))
         .route("/oauth/token", axum::routing::post(oauth::token))
         .route("/oauth/register", axum::routing::post(oauth::register))
-        .with_state(oauth_state)
-        .nest_service("/mcp", service);
+        .with_state(oauth_state.clone())
+        .nest_service(
+            "/mcp",
+            tower::ServiceBuilder::new()
+                .layer(axum::middleware::from_fn_with_state(
+                    oauth_state,
+                    oauth::auth_middleware,
+                ))
+                .service(service),
+        );
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
     eprintln!("MCP server listening on 0.0.0.0:{port}");

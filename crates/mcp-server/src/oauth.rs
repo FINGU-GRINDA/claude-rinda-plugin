@@ -1,7 +1,4 @@
 // OAuth 2.0 endpoints for the MCP server.
-// These public items are part of the OAuth API surface; some are only used by
-// tests or future callers outside this module.
-#![allow(dead_code)]
 //
 // The MCP server acts as an OAuth Authorization Server that proxies
 // authentication to RINDA's existing Google OAuth backend.
@@ -17,6 +14,7 @@ use axum::{
     Json,
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
+    middleware::Next,
     response::{IntoResponse, Redirect, Response},
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -44,6 +42,8 @@ pub struct PendingAuth {
     pub client_id: String,
     pub redirect_uri: String,
     pub code_challenge: Option<String>,
+    // Stored for future PKCE method validation; currently only S256 is supported.
+    #[allow(dead_code)]
     pub code_challenge_method: Option<String>,
     pub client_state: Option<String>, // original state from the client
     pub created_at: DateTime<Utc>,
@@ -54,7 +54,11 @@ pub struct PendingAuth {
 pub struct AuthCode {
     pub rinda_access_token: String,
     pub rinda_refresh_token: String,
+    // Stored for future redirect_uri validation; currently not enforced.
+    #[allow(dead_code)]
     pub redirect_uri: String,
+    // Stored for future client_id validation.
+    #[allow(dead_code)]
     pub client_id: String,
     pub code_challenge: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -65,18 +69,29 @@ pub struct AuthCode {
 #[derive(Clone, Debug)]
 pub struct SessionTokens {
     pub rinda_access_token: String,
-    pub rinda_refresh_token: String,
     pub expires_at: DateTime<Utc>,
+    // Stored for audit/debugging purposes.
+    #[allow(dead_code)]
     pub created_at: DateTime<Utc>,
 }
 
 /// A dynamically registered client (keyed by client_id).
 #[derive(Clone, Debug)]
 pub struct ClientRegistration {
+    // Stored for future client authentication; currently returned to the caller.
+    #[allow(dead_code)]
     pub client_secret: Option<String>,
+    // Stored for future redirect_uri validation.
+    #[allow(dead_code)]
     pub redirect_uris: Vec<String>,
+    // Stored for display/audit purposes.
+    #[allow(dead_code)]
     pub client_name: String,
 }
+
+/// Newtype carrying a validated RINDA access token, injected by auth middleware.
+#[derive(Clone, Debug)]
+pub struct AuthenticatedToken(pub String);
 
 /// Shared state injected into all OAuth route handlers via axum State.
 #[derive(Clone, Debug)]
@@ -89,6 +104,8 @@ pub struct OAuthState {
     pub sessions: Arc<DashMap<String, SessionTokens>>,
     /// client_id -> registration
     pub registered_clients: Arc<DashMap<String, ClientRegistration>>,
+    /// opaque refresh token (UUID) -> real RINDA refresh token
+    pub refresh_tokens: Arc<DashMap<String, String>>,
     /// RINDA API base URL
     pub base_url: String,
     /// This MCP server's externally reachable URL (for redirect URIs in metadata)
@@ -102,6 +119,7 @@ impl OAuthState {
             auth_codes: Arc::new(DashMap::new()),
             sessions: Arc::new(DashMap::new()),
             registered_clients: Arc::new(DashMap::new()),
+            refresh_tokens: Arc::new(DashMap::new()),
             base_url,
             server_url,
         }
@@ -118,24 +136,52 @@ impl OAuthState {
     }
 
     /// Store a new session and return the opaque session access token.
-    pub fn create_session(
-        &self,
-        rinda_access_token: String,
-        rinda_refresh_token: String,
-    ) -> String {
+    pub fn create_session(&self, rinda_access_token: String) -> String {
         let token = Uuid::new_v4().to_string();
         let now = Utc::now();
         self.sessions.insert(
             token.clone(),
             SessionTokens {
                 rinda_access_token,
-                rinda_refresh_token,
                 expires_at: now + chrono::Duration::seconds(SESSION_TTL_SECS),
                 created_at: now,
             },
         );
         token
     }
+
+    /// Store a real RINDA refresh token and return an opaque UUID refresh token.
+    pub fn create_opaque_refresh_token(&self, rinda_refresh_token: String) -> String {
+        let opaque = Uuid::new_v4().to_string();
+        self.refresh_tokens
+            .insert(opaque.clone(), rinda_refresh_token);
+        opaque
+    }
+
+    /// Look up the real RINDA refresh token by opaque token, consuming the opaque token.
+    pub fn consume_opaque_refresh_token(&self, opaque: &str) -> Option<String> {
+        self.refresh_tokens.remove(opaque).map(|(_, v)| v)
+    }
+}
+
+// ── Auth middleware ────────────────────────────────────────────────────────────
+
+/// Axum middleware that reads `Authorization: Bearer <token>`, validates it
+/// against the session store, and injects `AuthenticatedToken` into request
+/// extensions if valid. Invalid/missing tokens do NOT result in rejection here
+/// — individual tool handlers decide whether to require auth (allowing the MCP
+/// `initialize` request through without a session token).
+pub async fn auth_middleware(
+    State(state): State<Arc<OAuthState>>,
+    mut req: axum::http::Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    if let Some(token) = extract_bearer_token(req.headers())
+        && let Some(rinda_token) = state.validate_session(&token)
+    {
+        req.extensions_mut().insert(AuthenticatedToken(rinda_token));
+    }
+    next.run(req).await
 }
 
 // ── RFC 8414 Metadata ─────────────────────────────────────────────────────────
@@ -187,7 +233,7 @@ pub struct AuthorizeParams {
     pub scope: Option<String>,
 }
 
-/// `GET /oauth/authorize` — Redirect to RINDA Google OAuth.
+/// `GET /oauth/authorize` — Redirect to Google OAuth via RINDA backend.
 pub async fn authorize(
     State(state): State<Arc<OAuthState>>,
     Query(params): Query<AuthorizeParams>,
@@ -236,18 +282,61 @@ pub async fn authorize(
     let callback_url = format!("{}/oauth/callback", state.server_url);
     let encoded_callback = urlencoding::encode(&callback_url);
 
-    // Fetch the RINDA Google OAuth URL.
-    let rinda_auth_url = format!(
+    // Fetch the Google OAuth URL from RINDA backend via HTTP GET.
+    // RINDA returns JSON with the actual Google OAuth URL.
+    let rinda_auth_endpoint = format!(
         "{}/api/v1/auth/google?redirectUri={}",
         state.base_url, encoded_callback
     );
 
-    // We append our CSRF token as extra state so Google passes it back.
-    // RINDA backend may or may not preserve an extra state param.
-    // We encode our csrf_token as the `state` param to the RINDA endpoint.
-    let google_auth_url = format!("{rinda_auth_url}&state={csrf_token}");
+    let http_client = reqwest::Client::new();
+    let rinda_resp = match http_client.get(&rinda_auth_endpoint).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                format!("Failed to contact RINDA auth backend: {e}"),
+            )
+                .into_response();
+        }
+    };
 
-    Redirect::temporary(&google_auth_url).into_response()
+    let rinda_json: serde_json::Value = match rinda_resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                format!("RINDA auth backend returned invalid JSON: {e}"),
+            )
+                .into_response();
+        }
+    };
+
+    // Parse the Google OAuth URL from the JSON response.
+    // Handle both {"url": "..."} and {"data": {"url": "..."}} shapes.
+    let google_url = rinda_json.get("url").and_then(|v| v.as_str()).or_else(|| {
+        rinda_json
+            .get("data")
+            .and_then(|d| d.get("url"))
+            .and_then(|v| v.as_str())
+    });
+
+    let google_url = match google_url {
+        Some(u) => u.to_string(),
+        None => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                "RINDA backend did not return a Google OAuth URL",
+            )
+                .into_response();
+        }
+    };
+
+    // Append our CSRF token as the `state` param so Google passes it back.
+    let separator = if google_url.contains('?') { '&' } else { '?' };
+    let final_url = format!("{google_url}{separator}state={csrf_token}");
+
+    Redirect::temporary(&final_url).into_response()
 }
 
 // ── /oauth/callback ───────────────────────────────────────────────────────────
@@ -350,7 +439,7 @@ pub async fn oauth_callback(
         }
     };
 
-    let refresh_token = data
+    let rinda_refresh_token = data
         .get("refreshToken")
         .and_then(|v| v.as_str())
         .unwrap_or("")
@@ -362,7 +451,7 @@ pub async fn oauth_callback(
         auth_code.clone(),
         AuthCode {
             rinda_access_token: access_token,
-            rinda_refresh_token: refresh_token,
+            rinda_refresh_token,
             redirect_uri: pending.redirect_uri.clone(),
             client_id: pending.client_id.clone(),
             code_challenge: pending.code_challenge.clone(),
@@ -391,8 +480,12 @@ pub struct TokenRequest {
     pub grant_type: String,
     // authorization_code grant
     pub code: Option<String>,
+    // redirect_uri and client_id/secret stored for future validation
+    #[allow(dead_code)]
     pub redirect_uri: Option<String>,
+    #[allow(dead_code)]
     pub client_id: Option<String>,
+    #[allow(dead_code)]
     pub client_secret: Option<String>,
     pub code_verifier: Option<String>,
     // refresh_token grant
@@ -477,29 +570,40 @@ async fn handle_auth_code_grant(state: Arc<OAuthState>, req: TokenRequest) -> Re
     let rinda_refresh_token = entry.rinda_refresh_token.clone();
     drop(entry);
 
-    // Create a session token.
-    let session_token = state.create_session(rinda_access_token, rinda_refresh_token.clone());
+    // Create a session token (no raw refresh token stored in session).
+    let session_token = state.create_session(rinda_access_token);
+
+    // Generate opaque refresh token — the real RINDA refresh token is NOT returned to the client.
+    let opaque_refresh_token = state.create_opaque_refresh_token(rinda_refresh_token);
 
     Json(TokenResponse {
         access_token: session_token,
         token_type: "Bearer".to_string(),
         expires_in: SESSION_TTL_SECS,
-        refresh_token: rinda_refresh_token,
+        refresh_token: opaque_refresh_token,
     })
     .into_response()
 }
 
 async fn handle_refresh_token_grant(state: Arc<OAuthState>, req: TokenRequest) -> Response {
-    let refresh_token = match &req.refresh_token {
+    let opaque_refresh_token = match &req.refresh_token {
         Some(rt) => rt.clone(),
         None => {
             return (StatusCode::BAD_REQUEST, "Missing refresh_token").into_response();
         }
     };
 
-    // Call RINDA backend to refresh.
+    // Look up the real RINDA refresh token from the opaque token.
+    let rinda_refresh_token = match state.consume_opaque_refresh_token(&opaque_refresh_token) {
+        Some(rt) => rt,
+        None => {
+            return (StatusCode::UNAUTHORIZED, "Invalid or expired refresh token").into_response();
+        }
+    };
+
+    // Call RINDA backend to refresh using the real refresh token.
     let body = rinda_sdk::types::PostApiV1AuthRefreshBody {
-        refresh_token: refresh_token.clone(),
+        refresh_token: rinda_refresh_token.clone(),
     };
     let client = rinda_sdk::Client::new(&state.base_url);
     let resp = match client.post_api_v1_auth_refresh(&body).await {
@@ -538,19 +642,22 @@ async fn handle_refresh_token_grant(state: Arc<OAuthState>, req: TokenRequest) -
         }
     };
 
-    let new_refresh = data
+    let new_rinda_refresh = data
         .get("refreshToken")
         .and_then(|v| v.as_str())
-        .unwrap_or(&refresh_token)
+        .unwrap_or(&rinda_refresh_token)
         .to_string();
 
-    let session_token = state.create_session(new_access, new_refresh.clone());
+    let session_token = state.create_session(new_access);
+
+    // Issue new opaque refresh token for the new RINDA refresh token.
+    let new_opaque_refresh = state.create_opaque_refresh_token(new_rinda_refresh);
 
     Json(TokenResponse {
         access_token: session_token,
         token_type: "Bearer".to_string(),
         expires_in: SESSION_TTL_SECS,
-        refresh_token: new_refresh,
+        refresh_token: new_opaque_refresh,
     })
     .into_response()
 }
@@ -648,7 +755,7 @@ pub fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
 /// Validate a Bearer token against the session store.
 /// Returns `Ok(rinda_access_token)` if valid.
 /// Returns `Err(Response)` with 401 if invalid/expired.
-#[allow(clippy::result_large_err)]
+#[allow(clippy::result_large_err, dead_code)]
 pub fn validate_bearer(state: &Arc<OAuthState>, headers: &HeaderMap) -> Result<String, Response> {
     let token = match extract_bearer_token(headers) {
         Some(t) => t,
@@ -877,10 +984,7 @@ mod tests {
     #[test]
     fn test_session_create_and_validate() {
         let state = make_state();
-        let session_token = state.create_session(
-            "rinda-access-123".to_string(),
-            "rinda-refresh-456".to_string(),
-        );
+        let session_token = state.create_session("rinda-access-123".to_string());
         assert!(
             !session_token.is_empty(),
             "session token should not be empty"
@@ -900,6 +1004,58 @@ mod tests {
         let state = make_state();
         let result = state.validate_session("does-not-exist");
         assert!(result.is_none(), "unknown token should not validate");
+    }
+
+    // ── Opaque refresh token handling ─────────────────────────────────────────
+
+    /// Acceptance criteria: POST /oauth/token with auth_code grant returns opaque
+    /// refresh token (UUID), NOT the raw RINDA refresh token (issue #95 BLOCKER 2).
+    #[test]
+    fn test_opaque_refresh_token_is_not_rinda_token() {
+        let state = make_state();
+        let rinda_refresh = "rinda-real-refresh-token-secret";
+        let opaque = state.create_opaque_refresh_token(rinda_refresh.to_string());
+
+        // Opaque token should be a UUID, not the raw RINDA token.
+        assert_ne!(
+            opaque, rinda_refresh,
+            "opaque refresh token must differ from the real RINDA token"
+        );
+        assert!(
+            Uuid::parse_str(&opaque).is_ok(),
+            "opaque refresh token should be a valid UUID"
+        );
+    }
+
+    /// Acceptance criteria: POST /oauth/token with refresh_token grant accepts opaque
+    /// token and looks up the real RINDA token (issue #95 BLOCKER 3).
+    #[test]
+    fn test_consume_opaque_refresh_token() {
+        let state = make_state();
+        let rinda_refresh = "rinda-real-refresh-xyz".to_string();
+        let opaque = state.create_opaque_refresh_token(rinda_refresh.clone());
+
+        // Consuming should return the real RINDA token.
+        let retrieved = state.consume_opaque_refresh_token(&opaque);
+        assert_eq!(
+            retrieved,
+            Some(rinda_refresh),
+            "should return the real RINDA refresh token"
+        );
+
+        // Second consume should return None (token is single-use).
+        let second = state.consume_opaque_refresh_token(&opaque);
+        assert!(
+            second.is_none(),
+            "opaque refresh token should be single-use"
+        );
+    }
+
+    #[test]
+    fn test_consume_unknown_opaque_refresh_token() {
+        let state = make_state();
+        let result = state.consume_opaque_refresh_token("unknown-token");
+        assert!(result.is_none(), "unknown opaque token should return None");
     }
 
     // ── Bearer token extraction ───────────────────────────────────────────────
@@ -984,10 +1140,7 @@ mod tests {
     #[test]
     fn test_validate_bearer_valid_token_returns_rinda_token() {
         let state = make_state();
-        let session_token = state.create_session(
-            "rinda-access-abc".to_string(),
-            "rinda-refresh-def".to_string(),
-        );
+        let session_token = state.create_session("rinda-access-abc".to_string());
         let mut headers = HeaderMap::new();
         headers.insert(
             axum::http::header::AUTHORIZATION,
@@ -996,5 +1149,116 @@ mod tests {
         let result = validate_bearer(&state, &headers);
         assert!(result.is_ok(), "valid Bearer token should be accepted");
         assert_eq!(result.unwrap(), "rinda-access-abc");
+    }
+
+    // ── AuthenticatedToken injection (BLOCKER 1) ──────────────────────────────
+
+    /// Acceptance criteria: auth middleware inserts AuthenticatedToken for valid session (issue #95).
+    #[test]
+    fn test_authenticated_token_struct() {
+        let token = AuthenticatedToken("rinda-token-xyz".to_string());
+        assert_eq!(token.0, "rinda-token-xyz");
+        // Verify Clone works (needed for axum extension).
+        let cloned = token.clone();
+        assert_eq!(cloned.0, "rinda-token-xyz");
+    }
+
+    // ── Integration test: OAuth HTTP endpoints ────────────────────────────────
+
+    /// Integration test: GET /.well-known/oauth-authorization-server returns valid metadata.
+    #[tokio::test]
+    async fn test_integration_oauth_metadata_endpoint() {
+        use axum::Router;
+        use axum::routing::get;
+        use tokio::net::TcpListener;
+
+        let oauth_state = Arc::new(OAuthState::new(
+            "https://alpha.rinda.ai".to_string(),
+            "http://localhost:0".to_string(),
+        ));
+
+        let app = Router::new()
+            .route("/.well-known/oauth-authorization-server", get(metadata))
+            .with_state(oauth_state);
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let url = format!("http://{addr}/.well-known/oauth-authorization-server");
+        let resp = reqwest::get(&url).await.unwrap();
+        assert_eq!(resp.status(), 200);
+
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert!(
+            body["issuer"].as_str().is_some(),
+            "issuer should be present"
+        );
+        assert!(
+            body["authorization_endpoint"].as_str().is_some(),
+            "authorization_endpoint should be present"
+        );
+        assert!(
+            body["token_endpoint"].as_str().is_some(),
+            "token_endpoint should be present"
+        );
+        assert!(
+            body["registration_endpoint"].as_str().is_some(),
+            "registration_endpoint should be present"
+        );
+        assert_eq!(
+            body["code_challenge_methods_supported"],
+            serde_json::json!(["S256"])
+        );
+    }
+
+    /// Integration test: POST /oauth/register returns client_id.
+    #[tokio::test]
+    async fn test_integration_oauth_register_endpoint() {
+        use axum::Router;
+        use axum::routing::post;
+        use tokio::net::TcpListener;
+
+        let oauth_state = Arc::new(OAuthState::new(
+            "https://alpha.rinda.ai".to_string(),
+            "http://localhost:0".to_string(),
+        ));
+
+        let app = Router::new()
+            .route("/oauth/register", post(register))
+            .with_state(oauth_state);
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let url = format!("http://{addr}/oauth/register");
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(&url)
+            .json(&serde_json::json!({
+                "redirect_uris": ["https://example.com/callback"],
+                "client_name": "Test Client"
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), 201);
+        let body: serde_json::Value = resp.json().await.unwrap();
+        assert!(
+            body["client_id"].as_str().is_some(),
+            "client_id should be present"
+        );
+        assert!(
+            !body["client_id"].as_str().unwrap().is_empty(),
+            "client_id should not be empty"
+        );
     }
 }

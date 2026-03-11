@@ -32,6 +32,13 @@ pub struct AuthContext {
 /// - The JWT payload cannot be base64-decoded.
 /// - The JWT payload is not valid JSON.
 pub fn extract_auth_from_parts(parts: &http::request::Parts) -> Result<AuthContext, String> {
+    // First check if the OAuth middleware injected an AuthenticatedToken.
+    // This contains the real RINDA JWT (resolved from the opaque session token).
+    if let Some(authenticated) = parts.extensions.get::<crate::oauth::AuthenticatedToken>() {
+        return extract_auth_context_from_jwt(&authenticated.0);
+    }
+
+    // Fall back to reading the raw Authorization Bearer header (direct JWT).
     let auth_header = parts
         .headers
         .get(http::header::AUTHORIZATION)
@@ -189,16 +196,6 @@ pub async fn get_authenticated_client() -> Result<(rinda_sdk::Client, Credential
             }
         }
     }
-}
-
-/// Build an SDK client using a provided RINDA access token.
-///
-/// This is used when the MCP server receives a validated session token
-/// and needs to proxy API calls with the user's RINDA token, rather than
-/// reading tokens from the local credentials file.
-#[allow(dead_code)]
-pub fn get_authenticated_client_with_token(rinda_access_token: &str) -> rinda_sdk::Client {
-    sdk_client(Some(rinda_access_token))
 }
 
 /// Build an authenticated SDK client with an optional bearer token.
