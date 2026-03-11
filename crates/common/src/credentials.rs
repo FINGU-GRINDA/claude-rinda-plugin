@@ -5,7 +5,6 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use base64::Engine;
-use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
 use crate::config::{credentials_path, rinda_config_dir};
@@ -102,23 +101,23 @@ pub fn load_credentials_from(path: &Path) -> CredResult<Credentials> {
         }
         Err(e) => return Err(CredError::Io(e)),
     };
-    lock_file.lock_shared()?;
+    fs2::FileExt::lock_shared(&lock_file)?;
 
     let mut file = match File::open(path) {
         Ok(f) => f,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            let _ = lock_file.unlock();
+            let _ = fs2::FileExt::unlock(&lock_file);
             return Err(CredError::NotLoggedIn);
         }
         Err(e) => {
-            let _ = lock_file.unlock();
+            let _ = fs2::FileExt::unlock(&lock_file);
             return Err(CredError::Io(e));
         }
     };
 
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
-    lock_file.unlock()?;
+    fs2::FileExt::unlock(&lock_file)?;
 
     let creds: Credentials = serde_json::from_str(&contents)?;
     Ok(creds)
@@ -139,7 +138,7 @@ pub fn save_credentials_to(creds: &Credentials, path: &Path) -> CredResult<()> {
         .create(true)
         .truncate(false)
         .open(&lock_path)?;
-    lock_file.lock_exclusive()?;
+    fs2::FileExt::lock_exclusive(&lock_file)?;
 
     let json = serde_json::to_string_pretty(creds)?;
 
@@ -151,7 +150,7 @@ pub fn save_credentials_to(creds: &Credentials, path: &Path) -> CredResult<()> {
     }
     fs::rename(&tmp_path, path)?;
 
-    lock_file.unlock()?;
+    fs2::FileExt::unlock(&lock_file)?;
 
     Ok(())
 }
