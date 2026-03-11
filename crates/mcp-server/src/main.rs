@@ -241,6 +241,76 @@ struct LeadByTierParams {
     offset: Option<String>,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct GroupCreateParams {
+    #[schemars(description = "Group name (required, 1-255 chars)")]
+    name: String,
+    #[schemars(
+        description = "Workspace ID override (UUID). Defaults to the workspace in the token."
+    )]
+    workspace_id: Option<String>,
+    #[schemars(description = "Optional description")]
+    description: Option<String>,
+    #[schemars(description = "Whether this is a dynamic group")]
+    is_dynamic: Option<bool>,
+    #[schemars(description = "Enable automatic enrichment for group members")]
+    auto_enrich_enabled: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct GroupListParams {
+    #[schemars(description = "Search query string")]
+    search: Option<String>,
+    #[schemars(description = "Maximum number of results to return")]
+    limit: Option<String>,
+    #[schemars(description = "Pagination offset")]
+    offset: Option<String>,
+    #[schemars(description = "Filter by dynamic flag (\"true\" or \"false\")")]
+    is_dynamic: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct GroupIdParams {
+    #[schemars(description = "Customer group UUID")]
+    id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct GroupUpdateParams {
+    #[schemars(description = "Customer group UUID")]
+    id: String,
+    #[schemars(description = "New group name (required, 1-255 chars)")]
+    name: String,
+    #[schemars(description = "Whether this is a dynamic group (required)")]
+    is_dynamic: bool,
+    #[schemars(description = "New description")]
+    description: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct GroupMembersParams {
+    #[schemars(description = "Customer group UUID")]
+    id: String,
+    #[schemars(description = "Maximum number of results to return")]
+    limit: Option<String>,
+    #[schemars(description = "Pagination offset")]
+    offset: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct GroupMemberParams {
+    #[schemars(description = "Customer group UUID")]
+    id: String,
+    #[schemars(description = "Lead UUID")]
+    lead_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct GroupLeadParams {
+    #[schemars(description = "Lead UUID to look up group memberships for")]
+    lead_id: String,
+}
+
 // ── Server struct ────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -662,6 +732,136 @@ impl RindaMcpServer {
     ) -> String {
         let auth = require_auth!(parts);
         tools::lead::lead_by_tier(&auth, p.tier, p.customer_group_id, p.limit, p.offset).await
+    }
+
+    #[tool(
+        description = "Create a new customer group. Params: name (required, 1-255 chars), workspace_id (UUID, defaults to token workspace), description, is_dynamic, auto_enrich_enabled."
+    )]
+    async fn rinda_group_create(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<GroupCreateParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::group::group_create(
+            &auth,
+            p.name,
+            p.workspace_id,
+            p.description,
+            p.is_dynamic,
+            p.auto_enrich_enabled,
+        )
+        .await
+    }
+
+    #[tool(
+        description = "Search / list customer groups for the current workspace. Params: search (query string), limit, offset, is_dynamic (\"true\"/\"false\")."
+    )]
+    async fn rinda_group_list(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<GroupListParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::group::group_list(&auth, p.search, p.limit, p.offset, p.is_dynamic).await
+    }
+
+    #[tool(description = "Get a customer group by ID. Param: id (group UUID).")]
+    async fn rinda_group_get(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<GroupIdParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::group::group_get(&auth, p.id).await
+    }
+
+    #[tool(
+        description = "Update a customer group. Params: id (UUID), name (required, 1-255 chars), is_dynamic (required bool), description."
+    )]
+    async fn rinda_group_update(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<GroupUpdateParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::group::group_update(&auth, p.id, p.name, p.is_dynamic, p.description).await
+    }
+
+    #[tool(description = "Delete a customer group. Param: id (group UUID).")]
+    async fn rinda_group_delete(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<GroupIdParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::group::group_delete(&auth, p.id).await
+    }
+
+    #[tool(
+        description = "List members of a customer group. Params: id (group UUID), limit, offset."
+    )]
+    async fn rinda_group_members(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<GroupMembersParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::group::group_members(&auth, p.id, p.limit, p.offset).await
+    }
+
+    #[tool(
+        description = "Add a lead as a member of a customer group. Params: id (group UUID), lead_id (lead UUID)."
+    )]
+    async fn rinda_group_add_member(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<GroupMemberParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::group::group_add_member(&auth, p.id, p.lead_id).await
+    }
+
+    #[tool(
+        description = "Remove a lead from a customer group. Params: id (group UUID), lead_id (lead UUID)."
+    )]
+    async fn rinda_group_remove_member(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<GroupMemberParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::group::group_remove_member(&auth, p.id, p.lead_id).await
+    }
+
+    #[tool(
+        description = "List all customer groups that a given lead belongs to. Param: lead_id (lead UUID)."
+    )]
+    async fn rinda_group_for_lead(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<GroupLeadParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::group::group_for_lead(&auth, p.lead_id).await
     }
 }
 
