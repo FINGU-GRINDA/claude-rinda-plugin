@@ -172,7 +172,11 @@ List existing sequences in the workspace. Optional: `--offset` for pagination.
 rinda-cli sequence create --name "Campaign Name"
 ```
 
-Optional: `--type "email"`, `--steps '[{"delay":1,"template":"intro"}]'`
+Optional: `--type "email"`, `--steps '[{"delay":1,"subject":"Subject line","body":"Email body text"}]'`
+
+The response includes the created sequence `id`. Verify creation with `rinda-cli sequence list`.
+
+Step object fields: `delay`/`delayDays` (days, default 1), `subject`/`emailSubject` (required), `body`/`emailBodyText`, `bodyHtml`/`emailBodyHtml`, `stepOrder`.
 
 ### Sequence Generate
 
@@ -227,10 +231,13 @@ rinda-cli order history --buyer-id "search term" --days-inactive 30
 
 1. `rinda-cli auth ensure-valid`
 2. `rinda-cli sequence list` → check existing sequences
-3. `rinda-cli sequence create --name "Name"` → get sequence ID
-4. `rinda-cli sequence generate --id "ID"` → AI-generate email steps
+3. `rinda-cli sequence create --name "Name" [--type "email"] [--steps '[...]']` → get sequence ID
+   - **Verify**: check that the response contains an `id` field. If `id` is missing, run `rinda-cli sequence list` to confirm the draft was persisted.
+   - If you pass `--steps`, each step is created immediately after the sequence; check per-step results in the output.
+4. `rinda-cli sequence generate --id "ID"` → AI-generate email steps (skip if you already provided `--steps`)
 5. For each lead: `rinda-cli sequence add-contact --sequence-id "ID" --buyer-id "ID"`
-6. Present summary, suggest: check replies later
+6. Confirm: `rinda-cli sequence list` → verify the new sequence appears
+7. Present summary, suggest: check replies later
 
 ### 4. Reply Management
 
