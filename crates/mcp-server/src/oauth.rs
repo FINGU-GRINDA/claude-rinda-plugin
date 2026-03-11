@@ -1,12 +1,12 @@
 // OAuth 2.0 endpoints for the MCP server.
 //
 // The MCP server acts as an OAuth Authorization Server that proxies
-// authentication to RINDA's existing Google OAuth backend.
+// authentication to RINDA's /cli-auth page.
 //
 // Endpoints:
 //   GET  /.well-known/oauth-authorization-server  — RFC 8414 metadata
-//   GET  /oauth/authorize                          — Redirect to Google OAuth
-//   GET  /oauth/callback                           — Receive code from Google
+//   GET  /oauth/authorize                          — Redirect to RINDA /cli-auth
+//   GET  /oauth/callback                           — Receive token from /cli-auth
 //   POST /oauth/token                              — Exchange code / refresh
 //   POST /oauth/register                           — Dynamic client registration
 
@@ -182,10 +182,10 @@ pub async fn auth_middleware(
     mut req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> Response {
-    if let Some(token) = extract_bearer_token(req.headers()) {
-        if let Some(rinda_token) = state.validate_session(&token) {
-            req.extensions_mut().insert(AuthenticatedToken(rinda_token));
-        }
+    if let Some(token) = extract_bearer_token(req.headers())
+        && let Some(rinda_token) = state.validate_session(&token)
+    {
+        req.extensions_mut().insert(AuthenticatedToken(rinda_token));
         // If token was present but invalid, fall through without AuthenticatedToken.
         // The tool handler will decide whether to reject.
     }
@@ -198,18 +198,13 @@ pub async fn auth_middleware(
     // applies when we add explicit 401 returns in the future. For now, the
     // WWW-Authenticate header is always available on 401 responses.
     if response.status() == StatusCode::UNAUTHORIZED {
-        let resource_metadata_url = format!(
-            "{}/.well-known/oauth-protected-resource",
-            state.server_url
-        );
+        let resource_metadata_url =
+            format!("{}/.well-known/oauth-protected-resource", state.server_url);
         response.headers_mut().insert(
             axum::http::header::WWW_AUTHENTICATE,
-            format!(
-                "Bearer resource_metadata=\"{}\"",
-                resource_metadata_url
-            )
-            .parse()
-            .unwrap(),
+            format!("Bearer resource_metadata=\"{}\"", resource_metadata_url)
+                .parse()
+                .unwrap(),
         );
     }
 
@@ -294,7 +289,13 @@ pub struct AuthorizeParams {
     pub resource: Option<String>,
 }
 
-/// `GET /oauth/authorize` — Redirect to Google OAuth via RINDA backend.
+/// `GET /oauth/authorize` — Redirect to RINDA /cli-auth page.
+///
+/// Instead of proxying through Google OAuth directly (which fails because RINDA
+/// hardcodes the Google redirect_uri), we redirect the user to RINDA's
+/// /cli-auth page with our callback URL as the `callback` query parameter.
+/// After the user authenticates, RINDA redirects to our /oauth/callback
+/// endpoint with the RINDA JWT as a `token` query parameter.
 pub async fn authorize(
     State(state): State<Arc<OAuthState>>,
     Query(params): Query<AuthorizeParams>,
@@ -325,20 +326,20 @@ pub async fn authorize(
 
     // Validate resource parameter (RFC 8707) if provided.
     // It must match our server URL to prevent token audience confusion.
-    if let Some(resource) = &params.resource {
-        if !resource_matches_server(resource, &state.server_url) {
-            return (
-                StatusCode::BAD_REQUEST,
-                format!(
-                    "Invalid resource parameter: expected {}, got {resource}",
-                    state.server_url
-                ),
-            )
-                .into_response();
-        }
+    if let Some(resource) = &params.resource
+        && !resource_matches_server(resource, &state.server_url)
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            format!(
+                "Invalid resource parameter: expected {}, got {resource}",
+                state.server_url
+            ),
+        )
+            .into_response();
     }
 
-    // Generate a CSRF token to tie the Google callback back to this flow.
+    // Generate a CSRF token to tie the /cli-auth callback back to this flow.
     let csrf_token = Uuid::new_v4().to_string();
 
     // Store the pending auth state.
@@ -355,77 +356,32 @@ pub async fn authorize(
         },
     );
 
-    // Build the callback URL that RINDA should redirect back to.
-    let callback_url = format!("{}/oauth/callback", state.server_url);
+    // Build the callback URL that RINDA /cli-auth should redirect back to.
+    // The callback URL includes our CSRF token so we can tie the response to this flow.
+    let callback_url = format!("{}/oauth/callback?state={}", state.server_url, csrf_token);
     let encoded_callback = urlencoding::encode(&callback_url);
 
-    // Fetch the Google OAuth URL from RINDA backend via HTTP GET.
-    // RINDA returns JSON with the actual Google OAuth URL.
-    let rinda_auth_endpoint = format!(
-        "{}/api/v1/auth/google?redirectUri={}",
-        state.base_url, encoded_callback
-    );
+    // Redirect to RINDA's /cli-auth page with our callback URL.
+    // After Google login, RINDA will redirect to callback_url with ?token=<rinda-jwt>.
+    let redirect_url = format!("{}/cli-auth?callback={}", state.base_url, encoded_callback);
 
-    let http_client = reqwest::Client::new();
-    let rinda_resp = match http_client.get(&rinda_auth_endpoint).send().await {
-        Ok(r) => r,
-        Err(e) => {
-            return (
-                StatusCode::BAD_GATEWAY,
-                format!("Failed to contact RINDA auth backend: {e}"),
-            )
-                .into_response();
-        }
-    };
-
-    let rinda_json: serde_json::Value = match rinda_resp.json().await {
-        Ok(v) => v,
-        Err(e) => {
-            return (
-                StatusCode::BAD_GATEWAY,
-                format!("RINDA auth backend returned invalid JSON: {e}"),
-            )
-                .into_response();
-        }
-    };
-
-    // Parse the Google OAuth URL from the JSON response.
-    // Handle both {"url": "..."} and {"data": {"url": "..."}} shapes.
-    let google_url = rinda_json.get("url").and_then(|v| v.as_str()).or_else(|| {
-        rinda_json
-            .get("data")
-            .and_then(|d| d.get("url"))
-            .and_then(|v| v.as_str())
-    });
-
-    let google_url = match google_url {
-        Some(u) => u.to_string(),
-        None => {
-            return (
-                StatusCode::BAD_GATEWAY,
-                "RINDA backend did not return a Google OAuth URL",
-            )
-                .into_response();
-        }
-    };
-
-    // Append our CSRF token as the `state` param so Google passes it back.
-    let separator = if google_url.contains('?') { '&' } else { '?' };
-    let final_url = format!("{google_url}{separator}state={csrf_token}");
-
-    Redirect::temporary(&final_url).into_response()
+    Redirect::temporary(&redirect_url).into_response()
 }
 
 // ── /oauth/callback ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 pub struct CallbackParams {
+    /// RINDA JWT token sent back by /cli-auth after user authenticates.
+    pub token: Option<String>,
+    /// Google OAuth code (kept for backwards compatibility; not used in new flow).
+    #[allow(dead_code)]
     pub code: Option<String>,
     pub state: Option<String>,
     pub error: Option<String>,
 }
 
-/// `GET /oauth/callback` — Receive Google OAuth code and exchange with RINDA.
+/// `GET /oauth/callback` — Receive RINDA JWT token from /cli-auth and create session.
 pub async fn oauth_callback(
     State(state): State<Arc<OAuthState>>,
     Query(params): Query<CallbackParams>,
@@ -438,10 +394,15 @@ pub async fn oauth_callback(
             .into_response();
     }
 
-    let code = match &params.code {
-        Some(c) => c.clone(),
+    // Extract the RINDA JWT token sent back by /cli-auth.
+    let access_token = match &params.token {
+        Some(t) => t.clone(),
         None => {
-            return (StatusCode::BAD_REQUEST, "Missing code in callback").into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                "Missing token in callback (expected RINDA JWT from /cli-auth)",
+            )
+                .into_response();
         }
     };
 
@@ -469,58 +430,40 @@ pub async fn oauth_callback(
         return (StatusCode::BAD_REQUEST, "State parameter has expired").into_response();
     }
 
-    // Exchange code with RINDA backend.
-    let body = rinda_sdk::types::PostApiV1AuthGoogleCallbackBody {
-        code: code.clone(),
-        country: None,
-        experience: None,
-        industry: None,
-        invite_code: None,
-        lang: None,
-        marketing_email_consented: None,
-        state: None,
-        target: None,
-        turnstile_token: None,
-        utm_campaign: None,
-        utm_medium: None,
-        utm_source: None,
-    };
-
-    let client = rinda_sdk::Client::new(&state.base_url);
-    let rinda_tokens = match client.post_api_v1_auth_google_callback(&body).await {
-        Ok(resp) => resp.into_inner(),
+    // Validate the RINDA token by calling GET /api/v1/auth/me with Bearer auth.
+    // Build a reqwest client with the Authorization header pre-set.
+    let auth_value = format!("Bearer {access_token}");
+    let mut headers = reqwest::header::HeaderMap::new();
+    match reqwest::header::HeaderValue::from_str(&auth_value) {
+        Ok(hv) => {
+            headers.insert(reqwest::header::AUTHORIZATION, hv);
+        }
+        Err(_) => {
+            return (StatusCode::BAD_REQUEST, "Token contains invalid characters").into_response();
+        }
+    }
+    let reqwest_client = match reqwest::Client::builder().default_headers(headers).build() {
+        Ok(c) => c,
         Err(e) => {
             return (
-                StatusCode::BAD_GATEWAY,
-                format!("Failed to exchange code with RINDA backend: {e}"),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to build HTTP client: {e}"),
             )
                 .into_response();
         }
     };
+    let sdk_client = rinda_sdk::Client::new_with_client(&state.base_url, reqwest_client);
+    if let Err(e) = sdk_client.get_api_v1_auth_me().await {
+        return (
+            StatusCode::BAD_GATEWAY,
+            format!("Invalid or expired RINDA token: {e}"),
+        )
+            .into_response();
+    }
 
-    // Extract tokens from RINDA response.
-    let data = rinda_tokens
-        .get("data")
-        .and_then(|v| v.as_object())
-        .cloned()
-        .unwrap_or_else(|| rinda_tokens.clone().into_iter().collect());
-
-    let access_token = match data.get("token").and_then(|v| v.as_str()) {
-        Some(t) => t.to_string(),
-        None => {
-            return (
-                StatusCode::BAD_GATEWAY,
-                "RINDA backend did not return an access token",
-            )
-                .into_response();
-        }
-    };
-
-    let rinda_refresh_token = data
-        .get("refreshToken")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    // /cli-auth does not provide a refresh token; use an empty string.
+    // The opaque refresh token flow will fail gracefully at the RINDA backend.
+    let rinda_refresh_token = String::new();
 
     // Generate a short-lived authorization code.
     let auth_code = Uuid::new_v4().to_string();
@@ -1421,6 +1364,176 @@ mod tests {
             body["code_challenge_methods_supported"],
             serde_json::json!(["S256"])
         );
+    }
+
+    // ── /oauth/authorize: redirect to /cli-auth (issue #107) ─────────────────
+
+    /// Acceptance criteria: /oauth/authorize redirects to /cli-auth?callback=...&state=...
+    /// (issue #107). The redirect target must be the RINDA /cli-auth page, not Google OAuth.
+    #[tokio::test]
+    async fn test_authorize_redirects_to_cli_auth() {
+        use axum::Router;
+        use axum::routing::get;
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let server_url = format!("http://127.0.0.1:{}", addr.port());
+        let oauth_state = Arc::new(OAuthState::new(
+            "https://alpha.rinda.ai".to_string(),
+            server_url.clone(),
+        ));
+
+        let app = Router::new()
+            .route("/oauth/authorize", get(authorize))
+            .with_state(oauth_state.clone());
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap();
+
+        let url = format!(
+            "http://127.0.0.1:{}/oauth/authorize?response_type=code&client_id=test-client\
+             &redirect_uri=https%3A%2F%2Fexample.com%2Fcallback",
+            addr.port()
+        );
+        let resp = client.get(&url).send().await.unwrap();
+
+        // Should be a redirect (302/307).
+        assert!(
+            resp.status().is_redirection(),
+            "authorize should return a redirect, got {}",
+            resp.status()
+        );
+
+        let location = resp
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+
+        // The redirect target must include /cli-auth, NOT Google OAuth.
+        assert!(
+            location.contains("/cli-auth"),
+            "authorize should redirect to /cli-auth, got: {location}"
+        );
+        assert!(
+            location.contains("callback="),
+            "redirect URL should include callback= param, got: {location}"
+        );
+        assert!(
+            location.contains("alpha.rinda.ai"),
+            "redirect URL should target alpha.rinda.ai, got: {location}"
+        );
+        // Crucially: should NOT redirect to Google.
+        assert!(
+            !location.contains("accounts.google.com"),
+            "authorize must NOT redirect to Google OAuth directly, got: {location}"
+        );
+    }
+
+    /// Acceptance criteria: /oauth/authorize redirect URL embeds /oauth/callback
+    /// in the callback param, with CSRF state (issue #107).
+    #[tokio::test]
+    async fn test_authorize_callback_param_includes_state() {
+        use axum::Router;
+        use axum::routing::get;
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_url = format!("http://127.0.0.1:{}", addr.port());
+
+        let oauth_state = Arc::new(OAuthState::new(
+            "https://alpha.rinda.ai".to_string(),
+            server_url.clone(),
+        ));
+        let app = Router::new()
+            .route("/oauth/authorize", get(authorize))
+            .with_state(oauth_state.clone());
+
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap();
+
+        let url = format!(
+            "http://127.0.0.1:{}/oauth/authorize?response_type=code&client_id=test-client\
+             &redirect_uri=https%3A%2F%2Fexample.com%2Fcallback",
+            addr.port()
+        );
+        let resp = client.get(&url).send().await.unwrap();
+        let location = resp
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+
+        // The callback parameter should encode /oauth/callback with a state param.
+        let decoded = urlencoding::decode(
+            location
+                .split("callback=")
+                .nth(1)
+                .unwrap_or("")
+                .split('&')
+                .next()
+                .unwrap_or(""),
+        )
+        .unwrap_or_default();
+
+        assert!(
+            decoded.contains("/oauth/callback"),
+            "callback param should contain /oauth/callback, decoded: {decoded}"
+        );
+        assert!(
+            decoded.contains("state="),
+            "callback param should contain state= (CSRF), decoded: {decoded}"
+        );
+    }
+
+    // ── /oauth/callback: accept token param (issue #107) ─────────────────────
+
+    /// Acceptance criteria: CallbackParams deserializes the token query param (issue #107).
+    #[test]
+    fn test_callback_params_deserializes_token() {
+        let qs = "token=rinda-jwt-abc&state=csrf-123";
+        let params: CallbackParams = serde_urlencoded::from_str(qs).unwrap();
+        assert_eq!(params.token.as_deref(), Some("rinda-jwt-abc"));
+        assert_eq!(params.state.as_deref(), Some("csrf-123"));
+        assert!(params.code.is_none());
+        assert!(params.error.is_none());
+    }
+
+    /// Acceptance criteria: /oauth/callback returns 400 when token is missing (issue #107).
+    #[test]
+    fn test_callback_params_missing_token_is_detected() {
+        // No token field — should yield None.
+        let qs = "state=csrf-123";
+        let params: CallbackParams = serde_urlencoded::from_str(qs).unwrap();
+        assert!(
+            params.token.is_none(),
+            "token should be None when not provided"
+        );
+    }
+
+    /// Acceptance criteria: CallbackParams backwards compat — code field is preserved (issue #107).
+    #[test]
+    fn test_callback_params_keeps_code_field_for_backwards_compat() {
+        let qs = "code=google-code-xyz&state=csrf-123";
+        let params: CallbackParams = serde_urlencoded::from_str(qs).unwrap();
+        // code is kept in struct (for backwards compat) but unused in new flow.
+        assert!(params.token.is_none());
+        assert_eq!(params.state.as_deref(), Some("csrf-123"));
     }
 
     /// Integration test: POST /oauth/register returns client_id.

@@ -33,3 +33,4 @@ base64 = "0.22"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "sync", "time", "process", "io-util"] }
 serde_json = { workspace = true }
 reqwest = { workspace = true }
+serde_urlencoded = "0.7"
