@@ -23,6 +23,10 @@ chrono = "0.4"
 axum = "0.8"
 tokio-util = { version = "0.7" }
 http = "1"
+tower = "0.5"
+dashmap = "6"
+urlencoding = "2"
+sha2 = "0.10"
 base64 = "0.22"
 
 [dev-dependencies]
