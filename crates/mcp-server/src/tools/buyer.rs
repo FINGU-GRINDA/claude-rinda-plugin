@@ -150,6 +150,29 @@ pub async fn buyer_enrich(auth: &AuthContext, buyer_id: String) -> String {
     }
 }
 
+/// Retrieve clarification questions for a session in waiting_clarification status.
+pub async fn buyer_messages(auth: &AuthContext, session_id: String) -> String {
+    let client = sdk_client(Some(&auth.access_token));
+
+    let uuid = match session_id.parse::<Uuid>() {
+        Ok(u) => u,
+        Err(_) => {
+            return serde_json::json!({ "error": "Invalid session_id — must be a valid UUID" })
+                .to_string();
+        }
+    };
+
+    match client
+        .get_api_v1_lead_discovery_db_sessions_by_session_id_messages(&uuid)
+        .await
+    {
+        Ok(resp) => json_to_text(&resp.into_inner()),
+        Err(e) => {
+            serde_json::json!({ "error": format!("buyer messages failed: {e}") }).to_string()
+        }
+    }
+}
+
 /// Submit clarification answers for a search session in waiting_clarification status.
 pub async fn buyer_clarify(auth: &AuthContext, session_id: String, answers: String) -> String {
     let client = sdk_client(Some(&auth.access_token));
