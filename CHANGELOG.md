@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.8](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-plugin-v0.1.7...rinda-plugin-v0.1.8) (2026-03-11)
+
+
+### Features
+
+* **cli:** expose workspace list subcommand ([#117](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/117)) ([b7315e2](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/b7315e2215b6b59be59717daac848dfc222808a9))
+* **mcp,cli:** add customer group management (CRUD + members) ([#120](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/120)) ([d0f24b8](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/d0f24b80ff608d045a8c90134353015cc02a0064))
+* **mcp,cli:** add lead/buyer management CRUD, search, status ([#121](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/121)) ([4ddb5d3](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/4ddb5d3204441d68b9e6052d529b895701cdd36f))
+* **mcp,cli:** add search session history (list past searches) ([#119](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/119)) ([7f6196b](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/7f6196b3722b7f6d20a60fc457c1d1713a8d831b))
+* **mcp:** add buyer_messages and order_history tools, update READMEs ([#114](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/114)) ([fdd84b4](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/fdd84b49c843c80f4642136c093e7f33935a23aa))
+* **mcp:** expose rinda_workspace_list tool ([#118](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/118)) ([398cae6](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/398cae6f245bd35ffc3e9163539149f281df8d6e))
+
+
+### Bug Fixes
+
+* **ci:** switch Linux builds to musl for GLIBC-free static binaries ([#123](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/123)) ([8c54e26](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/8c54e26f3c7aad61049751369743dc8c1dd77769))
+* **mcp,cli:** forward steps in sequence create, fail-fast on empty workspace, verify creation ([#126](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/126)) ([56d0e4c](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/56d0e4c45d24f2a2cc2a76f9d92b27b28efdd5e0))
+* **mcp,cli:** use SSE streaming for buyer search endpoint ([#125](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/125)) ([e9477e9](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/e9477e9d25f5f18cdec474234a30fe9495e4aaeb))
+* **mcp:** handle RINDA refresh token in OAuth callback ([#109](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/109)) ([c066fc4](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/c066fc460d036fd9e5756692239b90943a2c83ad))
+
 ## [0.1.7](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-plugin-v0.1.6...rinda-plugin-v0.1.7) (2026-03-11)
 
 
