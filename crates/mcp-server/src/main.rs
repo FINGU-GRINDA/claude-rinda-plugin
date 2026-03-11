@@ -60,6 +60,12 @@ struct BuyerClarifyParams {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct BuyerSessionsParams {
+    #[schemars(description = "Optional user ID (UUID) to filter sessions by a specific user")]
+    user_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct CampaignStatsParams {
     #[schemars(
         description = "Period to query (e.g. \"7d\", \"30d\", \"90d\"). Defaults to \"30d\"."
@@ -557,6 +563,20 @@ impl RindaMcpServer {
     ) -> String {
         let auth = require_auth!(parts);
         tools::buyer::buyer_messages(&auth, p.session_id).await
+    }
+
+    #[tool(
+        description = "List all past buyer search sessions for the current workspace. Param: user_id (optional UUID to filter by user)."
+    )]
+    async fn rinda_buyer_sessions(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<BuyerSessionsParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::buyer::buyer_sessions(&auth, p.user_id).await
     }
 
     #[tool(
