@@ -83,11 +83,8 @@ pub async fn auth_status(parts: Option<&http::request::Parts>) -> String {
 /// Authentication is handled automatically by the MCP client (e.g. Claude Desktop)
 /// through the server's OAuth endpoints.
 pub async fn auth_login() -> String {
-    let server_url =
-        std::env::var("MCP_SERVER_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
     serde_json::json!({
-        "auth_url": format!("{}/oauth/authorize", server_url),
-        "instructions": "Authentication is handled automatically by your MCP client via OAuth 2.0. If you are not authenticated, your client should redirect you to sign in with Google. You can also check your auth status using the rinda_auth_status tool."
+        "instructions": "Authentication is handled automatically by your MCP client (e.g. Claude Desktop) via the OAuth 2.0 flow. If you are not yet authenticated, your client should prompt you to sign in with Google automatically when you try to use any Rinda tool. You can check your current auth status using the rinda_auth_status tool. Do NOT visit the /oauth/authorize URL directly — it requires parameters that only the MCP client provides."
     })
     .to_string()
 }
@@ -99,15 +96,15 @@ mod tests {
     /// Acceptance criteria: rinda_auth_login should return a URL and instructions
     /// without requiring credentials (works when not authenticated).
     #[tokio::test]
-    async fn auth_login_returns_url_and_instructions() {
+    async fn auth_login_returns_instructions() {
         let result = auth_login().await;
         let parsed: serde_json::Value =
             serde_json::from_str(&result).expect("should return valid JSON");
 
-        let url = parsed["auth_url"].as_str().expect("should have auth_url");
+        // Should NOT include a direct auth_url (users should not visit it directly)
         assert!(
-            url.contains("/oauth/authorize"),
-            "auth URL should contain '/oauth/authorize'"
+            parsed.get("auth_url").is_none(),
+            "should not include auth_url to avoid users visiting it directly"
         );
 
         let instructions = parsed["instructions"]
