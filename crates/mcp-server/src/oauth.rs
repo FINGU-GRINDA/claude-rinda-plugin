@@ -46,6 +46,8 @@ pub struct PendingAuth {
     #[allow(dead_code)]
     pub code_challenge_method: Option<String>,
     pub client_state: Option<String>, // original state from the client
+    /// RFC 8707 resource indicator — the MCP server URI the token is intended for.
+    pub resource: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -61,6 +63,8 @@ pub struct AuthCode {
     #[allow(dead_code)]
     pub client_id: String,
     pub code_challenge: Option<String>,
+    /// RFC 8707 resource indicator stored from the authorize request.
+    pub resource: Option<String>,
     pub created_at: DateTime<Utc>,
     pub used: bool,
 }
@@ -286,6 +290,8 @@ pub struct AuthorizeParams {
     pub code_challenge_method: Option<String>,
     #[allow(unused)]
     pub scope: Option<String>,
+    /// RFC 8707 resource indicator — the MCP server URI the token is intended for.
+    pub resource: Option<String>,
 }
 
 /// `GET /oauth/authorize` — Redirect to Google OAuth via RINDA backend.
@@ -317,6 +323,21 @@ pub async fn authorize(
         }
     };
 
+    // Validate resource parameter (RFC 8707) if provided.
+    // It must match our server URL to prevent token audience confusion.
+    if let Some(resource) = &params.resource {
+        if !resource_matches_server(resource, &state.server_url) {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!(
+                    "Invalid resource parameter: expected {}, got {resource}",
+                    state.server_url
+                ),
+            )
+                .into_response();
+        }
+    }
+
     // Generate a CSRF token to tie the Google callback back to this flow.
     let csrf_token = Uuid::new_v4().to_string();
 
@@ -329,6 +350,7 @@ pub async fn authorize(
             code_challenge: params.code_challenge.clone(),
             code_challenge_method: params.code_challenge_method.clone(),
             client_state: params.state.clone(),
+            resource: params.resource.clone(),
             created_at: Utc::now(),
         },
     );
@@ -510,6 +532,7 @@ pub async fn oauth_callback(
             redirect_uri: pending.redirect_uri.clone(),
             client_id: pending.client_id.clone(),
             code_challenge: pending.code_challenge.clone(),
+            resource: pending.resource.clone(),
             created_at: Utc::now(),
             used: false,
         },
@@ -545,6 +568,8 @@ pub struct TokenRequest {
     pub code_verifier: Option<String>,
     // refresh_token grant
     pub refresh_token: Option<String>,
+    /// RFC 8707 resource indicator — must match the value from the authorize request.
+    pub resource: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -616,6 +641,30 @@ async fn handle_auth_code_grant(state: Arc<OAuthState>, req: TokenRequest) -> Re
         };
         if !verify_pkce_s256(&verifier, challenge) {
             return (StatusCode::BAD_REQUEST, "PKCE verification failed").into_response();
+        }
+    }
+
+    // Validate RFC 8707 resource indicator if one was stored during authorization.
+    // The token request resource must match what was sent during authorization.
+    if let Some(stored_resource) = &entry.resource {
+        match &req.resource {
+            Some(req_resource) if req_resource == stored_resource => {}
+            Some(req_resource) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "resource mismatch: authorize used {stored_resource}, token request used {req_resource}"
+                    ),
+                )
+                    .into_response();
+            }
+            None => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    "Missing resource parameter (required because it was sent during authorization)",
+                )
+                    .into_response();
+            }
         }
     }
 
@@ -786,6 +835,16 @@ pub async fn register(
 }
 
 // ── PKCE helpers ──────────────────────────────────────────────────────────────
+
+/// Check whether a `resource` parameter matches our server URL.
+///
+/// Per RFC 8707 §2, the resource is an absolute URI. We normalize trailing
+/// slashes and compare case-insensitively on scheme+host (but case-sensitive
+/// on path) to be robust while still preventing audience confusion.
+pub fn resource_matches_server(resource: &str, server_url: &str) -> bool {
+    let normalize = |s: &str| s.trim_end_matches('/').to_string();
+    normalize(resource) == normalize(server_url)
+}
 
 /// Verify PKCE S256: `BASE64URL(SHA256(verifier)) == challenge`.
 pub fn verify_pkce_s256(verifier: &str, challenge: &str) -> bool {
@@ -986,6 +1045,52 @@ mod tests {
         );
     }
 
+    // ── RFC 8707 resource parameter matching ──────────────────────────────────
+
+    #[test]
+    fn test_resource_matches_server_exact() {
+        assert!(resource_matches_server(
+            "https://mcp.example.com",
+            "https://mcp.example.com"
+        ));
+    }
+
+    #[test]
+    fn test_resource_matches_server_trailing_slash() {
+        assert!(resource_matches_server(
+            "https://mcp.example.com/",
+            "https://mcp.example.com"
+        ));
+        assert!(resource_matches_server(
+            "https://mcp.example.com",
+            "https://mcp.example.com/"
+        ));
+    }
+
+    #[test]
+    fn test_resource_matches_server_with_path() {
+        assert!(resource_matches_server(
+            "https://mcp.example.com/mcp",
+            "https://mcp.example.com/mcp"
+        ));
+    }
+
+    #[test]
+    fn test_resource_does_not_match_different_server() {
+        assert!(!resource_matches_server(
+            "https://evil.example.com",
+            "https://mcp.example.com"
+        ));
+    }
+
+    #[test]
+    fn test_resource_does_not_match_different_path() {
+        assert!(!resource_matches_server(
+            "https://mcp.example.com/other",
+            "https://mcp.example.com/mcp"
+        ));
+    }
+
     // ── Token endpoint: invalid grant type ────────────────────────────────────
 
     /// Acceptance criteria: POST /oauth/token with unsupported grant_type returns error (issue #95).
@@ -1024,6 +1129,7 @@ mod tests {
             redirect_uri: "https://example.com/cb".to_string(),
             client_id: "client".to_string(),
             code_challenge: None,
+            resource: None,
             created_at: old_time,
             used: false,
         };
@@ -1158,6 +1264,7 @@ mod tests {
             code_challenge: None,
             code_challenge_method: None,
             client_state: None,
+            resource: None,
             created_at: old_time,
         };
         let age = Utc::now() - pending.created_at;
