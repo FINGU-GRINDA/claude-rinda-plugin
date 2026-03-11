@@ -39,6 +39,7 @@ The following MCP tools are available:
 | `rinda_auth_login` | Return browser login URL and instructions |
 | `rinda_workspace_list` | List workspaces the authenticated user belongs to |
 | `rinda_buyer_search` | Start an async buyer search, returns sessionId |
+| `rinda_buyer_sessions` | List all past search sessions for the workspace |
 | `rinda_buyer_status` | Poll status of an async search session |
 | `rinda_buyer_results` | Get results of a completed search session |
 | `rinda_buyer_select` | Save selected leads from a discovery session |
@@ -85,6 +86,15 @@ rinda-cli buyer search --industry "cosmetics" --countries "US,DE" --buyer-type "
 ```
 
 All flags optional. Returns a `sessionId` — the search runs async. If 422 error, fall back to `rinda-cli order history`.
+
+### List Past Search Sessions
+
+```bash
+rinda-cli buyer sessions
+rinda-cli buyer sessions --user-id "uuid"
+```
+
+List all previous search sessions for the current workspace. Use this to find past session IDs when you don't have one. Optional `--user-id` filter narrows results to a specific user.
 
 ### Buyer Status
 
@@ -197,13 +207,14 @@ rinda-cli order history --buyer-id "search term" --days-inactive 30
 ### 1. Buyer Search (end-to-end)
 
 1. `rinda-cli auth ensure-valid`
-2. `rinda-cli buyer search --industry "X" --countries "Y" --limit 50` → get `sessionId`
-3. Poll: `rinda-cli buyer status --session-id "ID"`
+2. If you need to find a past session ID: `rinda-cli buyer sessions` → pick session from list
+3. `rinda-cli buyer search --industry "X" --countries "Y" --limit 50` → get `sessionId`
+4. Poll: `rinda-cli buyer status --session-id "ID"`
    - If `waiting_clarification` → `rinda-cli buyer messages --session-id "ID"` → present questions to user → `rinda-cli buyer clarify --session-id "ID" --answers '{...}'` → resume polling
    - If `complete` → proceed to results
-4. `rinda-cli buyer results --session-id "ID"` → view discovered leads
-5. Score leads using **buyer-qualification** rules (see references)
-6. Present ranked table, offer: select? enrich? create sequence?
+5. `rinda-cli buyer results --session-id "ID"` → view discovered leads
+6. Score leads using **buyer-qualification** rules (see references)
+7. Present ranked table, offer: select? enrich? create sequence?
 
 ### 2. Contact Enrichment
 
