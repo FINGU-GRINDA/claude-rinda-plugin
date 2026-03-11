@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  mcp-server:
+    build: .
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    env_file:
+      - .env
+    environment:
+      - PORT=${PORT:-3000}
+      - RUST_LOG=${RUST_LOG:-info}
+      - RINDA_API_BASE_URL=${RINDA_API_BASE_URL:-https://alpha.rinda.ai}
+      - MCP_SERVER_URL=${MCP_SERVER_URL:-http://localhost:3000}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3000}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

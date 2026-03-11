@@ -1,0 +1,26 @@
+target/
+.git/
+.worktrees/
+.github/
+.claude-plugin/
+bin/
+plugins/
+crates/cli/
+
+# Markdown docs (keep doc/openapi.json for sdk build.rs)
+*.md
+doc/ARCHITECTURE.md
+doc/FLOWS.md
+doc/PLAN_CLI_WRAPPER.md
+doc/CLI_API_STATUS.md
+doc/RINDA_Cowork_Plugin_DevGuide_EN*
+
+# Local env and credentials (never bake into image)
+.env
+credentials.json
+
+# Editor artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
