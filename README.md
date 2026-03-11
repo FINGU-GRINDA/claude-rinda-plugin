@@ -104,7 +104,7 @@ bin/
 crates/
   cli/                      # rinda-cli (Rust, handles auth + API)
   sdk/                      # Auto-generated from OpenAPI spec
-  mcp-server/               # rinda-mcp (Rust, MCP server via stdio)
+  mcp-server/               # rinda-mcp (Rust, HTTP MCP server with OAuth)
 ```
 
 ### CLI
@@ -126,20 +126,21 @@ See [MCP Server (Standalone)](#mcp-server-standalone) below for usage outside th
 | `rinda-cli campaign stats` | Get campaign stats |
 | `rinda-cli sequence create` | Create email sequence |
 | `rinda-cli email send` | Send an email |
+| `rinda-cli config show` | Show current configuration |
+| `rinda-cli order list` | List order history |
 
 ---
 
-## MCP Server (Standalone)
+## MCP Server (Remote)
 
-The `rinda-mcp` server can be used outside the Claude Code plugin context with any MCP-compatible client (Claude Desktop, Cursor, etc.).
+The RINDA MCP server is hosted remotely and can be used with any MCP-compatible client that supports remote servers with OAuth (Claude Desktop, Cursor, etc.). No local installation required.
 
-**Prerequisites:** Run `rinda-cli auth login` once to create `~/.rinda/credentials.json`. The MCP server reads credentials from this file automatically.
+**Server URLs:**
 
-**Install:**
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/FINGU-GRINDA/claude-rinda-plugin/main/bin/install.sh)
-```
+| Environment | URL |
+|-------------|-----|
+| Beta (dev/test) | `https://beta-mcp.rinda.ai` |
+| Production | `https://mcp.rinda.ai` |
 
 **Configure your MCP client:**
 
@@ -149,14 +150,21 @@ For Claude Desktop (macOS: `~/Library/Application Support/Claude/claude_desktop_
 {
   "mcpServers": {
     "rinda": {
-      "command": "/Users/yourname/.rinda/bin/rinda-mcp",
-      "args": []
+      "url": "https://beta-mcp.rinda.ai"
     }
   }
 }
 ```
 
-Replace `/Users/yourname` with your home directory path. On Linux use `/home/yourname/.rinda/bin/rinda-mcp`.
+The server supports OAuth 2.0 with dynamic client registration. On first connection, your MCP client will open a browser for Google authentication via RINDA. Tokens are managed automatically by the client.
+
+**OAuth discovery endpoints:**
+
+| Endpoint | Description |
+|----------|-------------|
+| `/.well-known/oauth-authorization-server` | RFC 8414 authorization server metadata |
+| `/.well-known/oauth-protected-resource` | RFC 9728 protected resource metadata |
+| `/oauth/register` | Dynamic client registration (RFC 7591) |
 
 ---
 
@@ -181,12 +189,12 @@ Tokens refresh automatically. Only re-authenticate if unused for 14+ days.
 | Item | Details |
 |------|---------|
 | Plugin type | Claude Code Marketplace |
-| Authentication | Google OAuth 2.0 |
+| Authentication | Google OAuth 2.0 via RINDA |
 | CLI | Rust (cross-platform: Linux, macOS, Windows) |
-| MCP Server | rinda-mcp (stdio transport, auto-discovered by Claude Code) |
+| MCP Server | rinda-mcp (HTTP transport with OAuth, hosted remotely) |
 | SDK | Auto-generated from OpenAPI spec via progenitor |
 | Token validity | Access: 1 hour (auto-refresh), Refresh: 14 days |
-| Credentials | `~/.rinda/credentials.json` |
+| Credentials | CLI: `~/.rinda/credentials.json`, MCP: OAuth session tokens |
 | License | MIT |
 
 ---

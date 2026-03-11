@@ -117,6 +117,14 @@ struct SequenceAddContactParams {
     buyer_id: String,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct OrderHistoryParams {
+    #[schemars(description = "Filter by buyer/lead ID or name")]
+    buyer_id: Option<String>,
+    #[schemars(description = "Only include leads inactive for at least this many days")]
+    days_inactive: Option<u32>,
+}
+
 // ── Server struct ────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -349,6 +357,34 @@ impl RindaMcpServer {
     ) -> String {
         let auth = require_auth!(parts);
         tools::sequence::sequence_add_contact(&auth, p.sequence_id, p.buyer_id).await
+    }
+
+    #[tool(
+        description = "Retrieve clarification questions for a buyer search session in waiting_clarification status. Param: session_id (UUID)."
+    )]
+    async fn rinda_buyer_messages(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<SessionIdParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::buyer::buyer_messages(&auth, p.session_id).await
+    }
+
+    #[tool(
+        description = "Retrieve order history (uses leads/search; no dedicated orders API). Params: buyer_id (filter by name/ID), days_inactive (minimum inactive days)."
+    )]
+    async fn rinda_order_history(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<OrderHistoryParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::order::order_history(&auth, p.buyer_id, p.days_inactive).await
     }
 }
 
