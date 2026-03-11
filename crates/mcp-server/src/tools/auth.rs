@@ -83,8 +83,8 @@ pub async fn auth_status(parts: Option<&http::request::Parts>) -> String {
 /// Authentication is handled automatically by the MCP client (e.g. Claude Desktop)
 /// through the server's OAuth endpoints.
 pub async fn auth_login() -> String {
-    let server_url = std::env::var("MCP_SERVER_URL")
-        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let server_url =
+        std::env::var("MCP_SERVER_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
     serde_json::json!({
         "auth_url": format!("{}/oauth/authorize", server_url),
         "instructions": "Authentication is handled automatically by your MCP client via OAuth 2.0. If you are not authenticated, your client should redirect you to sign in with Google. You can also check your auth status using the rinda_auth_status tool."
