@@ -2,32 +2,27 @@
 
 use uuid::Uuid;
 
-use crate::auth::{get_authenticated_client, json_to_text};
+use crate::auth::{AuthContext, json_to_text, sdk_client};
 
 /// Send an email via the RINDA API.
-pub async fn email_send(to: String, subject: String, body: String) -> String {
-    let (client, creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+pub async fn email_send(auth: &AuthContext, to: String, subject: String, body: String) -> String {
+    let client = sdk_client(Some(&auth.access_token));
 
-    let user_id = match creds.user_id.parse::<Uuid>() {
+    let user_id = match auth.user_id.parse::<Uuid>() {
         Ok(u) => u,
         Err(_) => {
             return serde_json::json!({
-                "error": "Invalid user ID in credentials. Please log in again."
+                "error": "Invalid user ID in token. Please re-authenticate."
             })
             .to_string();
         }
     };
 
-    let workspace_id = match creds.workspace_id.parse::<Uuid>() {
+    let workspace_id = match auth.workspace_id.parse::<Uuid>() {
         Ok(u) => u,
         Err(_) => {
             return serde_json::json!({
-                "error": "Invalid workspace ID in credentials. Please log in again."
+                "error": "Invalid workspace ID in token. Please re-authenticate."
             })
             .to_string();
         }

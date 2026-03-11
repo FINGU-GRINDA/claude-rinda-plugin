@@ -1525,7 +1525,9 @@ name = "rinda-mcp"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64",
  "chrono",
+ "http",
  "reqwest",
  "rinda-common",
  "rinda-sdk",

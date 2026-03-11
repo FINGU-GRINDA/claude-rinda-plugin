@@ -1,6 +1,6 @@
 // Campaign tool implementations: rinda_campaign_stats.
 
-use crate::auth::{get_authenticated_client, json_to_text};
+use crate::auth::{AuthContext, json_to_text, sdk_client};
 
 /// Parse a period string like "7d", "30d", "90d" into a number of days.
 pub(crate) fn parse_period_days(period: &str) -> Option<i64> {
@@ -17,13 +17,8 @@ pub(crate) fn parse_period_days(period: &str) -> Option<i64> {
 }
 
 /// Get campaign dashboard statistics for a time period.
-pub async fn campaign_stats(period: Option<String>) -> String {
-    let (client, _creds) = match get_authenticated_client().await {
-        Ok(v) => v,
-        Err(e) => {
-            return serde_json::json!({ "error": e }).to_string();
-        }
-    };
+pub async fn campaign_stats(auth: &AuthContext, period: Option<String>) -> String {
+    let client = sdk_client(Some(&auth.access_token));
 
     let period_str = period.as_deref().unwrap_or("30d");
     let days = parse_period_days(period_str).unwrap_or(30);

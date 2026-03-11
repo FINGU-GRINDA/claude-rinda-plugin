@@ -131,6 +131,20 @@ impl RindaMcpServer {
     }
 }
 
+// ── Helper: extract auth or return error JSON ─────────────────────────────────
+
+/// Extract the `AuthContext` from the HTTP request parts injected by the
+/// `StreamableHttpService`. Returns `Some(auth)` on success or writes an error
+/// response string and returns `None`.
+macro_rules! require_auth {
+    ($parts:expr) => {
+        match auth::extract_auth_from_parts(&$parts) {
+            Ok(ctx) => ctx,
+            Err(e) => return serde_json::json!({ "error": e }).to_string(),
+        }
+    };
+}
+
 // ── Tool implementations ─────────────────────────────────────────────────────
 
 #[tool_router]
@@ -138,8 +152,14 @@ impl RindaMcpServer {
     #[tool(
         description = "Return current authentication status: email, workspace, token expiry. Works without credentials — returns not-authenticated status."
     )]
-    async fn rinda_auth_status(&self, Parameters(_): Parameters<EmptyParams>) -> String {
-        tools::auth::auth_status().await
+    async fn rinda_auth_status(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(_): Parameters<EmptyParams>,
+    ) -> String {
+        tools::auth::auth_status(Some(&parts)).await
     }
 
     #[tool(
@@ -152,8 +172,16 @@ impl RindaMcpServer {
     #[tool(
         description = "Start an async buyer search. Returns sessionId for polling. Params: industry, countries (comma-separated codes), buyer_type, min_revenue (USD), limit."
     )]
-    async fn rinda_buyer_search(&self, Parameters(p): Parameters<BuyerSearchParams>) -> String {
+    async fn rinda_buyer_search(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<BuyerSearchParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
         tools::buyer::buyer_search(
+            &auth,
             p.industry,
             p.countries,
             p.buyer_type,
@@ -166,57 +194,113 @@ impl RindaMcpServer {
     #[tool(
         description = "Poll the status of an async buyer search session. Param: session_id (UUID)."
     )]
-    async fn rinda_buyer_status(&self, Parameters(p): Parameters<SessionIdParams>) -> String {
-        tools::buyer::buyer_status(p.session_id).await
+    async fn rinda_buyer_status(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<SessionIdParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::buyer::buyer_status(&auth, p.session_id).await
     }
 
     #[tool(
         description = "Get the results of a completed buyer search session. Param: session_id (UUID)."
     )]
-    async fn rinda_buyer_results(&self, Parameters(p): Parameters<SessionIdParams>) -> String {
-        tools::buyer::buyer_results(p.session_id).await
+    async fn rinda_buyer_results(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<SessionIdParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::buyer::buyer_results(&auth, p.session_id).await
     }
 
     #[tool(
         description = "Save selected leads from a discovery session. Params: session_id (UUID), recommendation_id."
     )]
-    async fn rinda_buyer_select(&self, Parameters(p): Parameters<BuyerSelectParams>) -> String {
-        tools::buyer::buyer_select(p.session_id, p.recommendation_id).await
+    async fn rinda_buyer_select(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<BuyerSelectParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::buyer::buyer_select(&auth, p.session_id, p.recommendation_id).await
     }
 
     #[tool(
         description = "Enrich a buyer/lead with additional contact and company data. Param: buyer_id (website URL or lead ID)."
     )]
-    async fn rinda_buyer_enrich(&self, Parameters(p): Parameters<BuyerEnrichParams>) -> String {
-        tools::buyer::buyer_enrich(p.buyer_id).await
+    async fn rinda_buyer_enrich(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<BuyerEnrichParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::buyer::buyer_enrich(&auth, p.buyer_id).await
     }
 
     #[tool(
         description = "Submit answers to clarification questions for a search session in waiting_clarification status. Params: session_id (UUID), answers (JSON object string)."
     )]
-    async fn rinda_buyer_clarify(&self, Parameters(p): Parameters<BuyerClarifyParams>) -> String {
-        tools::buyer::buyer_clarify(p.session_id, p.answers).await
+    async fn rinda_buyer_clarify(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<BuyerClarifyParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::buyer::buyer_clarify(&auth, p.session_id, p.answers).await
     }
 
     #[tool(
         description = "Get campaign dashboard statistics. Param: period (e.g. \"7d\", \"30d\", \"90d\"; default \"30d\")."
     )]
-    async fn rinda_campaign_stats(&self, Parameters(p): Parameters<CampaignStatsParams>) -> String {
-        tools::campaign::campaign_stats(p.period).await
+    async fn rinda_campaign_stats(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<CampaignStatsParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::campaign::campaign_stats(&auth, p.period).await
     }
 
     #[tool(
         description = "Send an email via RINDA. Params: to (recipient email), subject, body (plain text)."
     )]
-    async fn rinda_email_send(&self, Parameters(p): Parameters<EmailSendParams>) -> String {
-        tools::email::email_send(p.to, p.subject, p.body).await
+    async fn rinda_email_send(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<EmailSendParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::email::email_send(&auth, p.to, p.subject, p.body).await
     }
 
     #[tool(
         description = "Get recent email replies. Param: limit (max replies to return; default 50)."
     )]
-    async fn rinda_reply_check(&self, Parameters(p): Parameters<ReplyCheckParams>) -> String {
-        tools::reply::reply_check(p.limit).await
+    async fn rinda_reply_check(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<ReplyCheckParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::reply::reply_check(&auth, p.limit).await
     }
 
     #[tool(
@@ -224,21 +308,39 @@ impl RindaMcpServer {
     )]
     async fn rinda_sequence_create(
         &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
         Parameters(p): Parameters<SequenceCreateParams>,
     ) -> String {
-        tools::sequence::sequence_create(p.name, p.seq_type, p.steps).await
+        let auth = require_auth!(parts);
+        tools::sequence::sequence_create(&auth, p.name, p.seq_type, p.steps).await
     }
 
     #[tool(description = "List existing email sequences. Params: limit, offset (for pagination).")]
-    async fn rinda_sequence_list(&self, Parameters(p): Parameters<SequenceListParams>) -> String {
-        tools::sequence::sequence_list(p.limit, p.offset).await
+    async fn rinda_sequence_list(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<SequenceListParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::sequence::sequence_list(&auth, p.limit, p.offset).await
     }
 
     #[tool(
         description = "AI-generate email steps for an existing sequence. Param: id (sequence UUID)."
     )]
-    async fn rinda_sequence_generate(&self, Parameters(p): Parameters<SequenceIdParams>) -> String {
-        tools::sequence::sequence_generate(p.id).await
+    async fn rinda_sequence_generate(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(p): Parameters<SequenceIdParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::sequence::sequence_generate(&auth, p.id).await
     }
 
     #[tool(
@@ -246,9 +348,13 @@ impl RindaMcpServer {
     )]
     async fn rinda_sequence_add_contact(
         &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
         Parameters(p): Parameters<SequenceAddContactParams>,
     ) -> String {
-        tools::sequence::sequence_add_contact(p.sequence_id, p.buyer_id).await
+        let auth = require_auth!(parts);
+        tools::sequence::sequence_add_contact(&auth, p.sequence_id, p.buyer_id).await
     }
 }
 
