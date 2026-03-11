@@ -2,7 +2,7 @@ mod auth;
 mod tools;
 
 use rmcp::{
-    ServerHandler, ServiceExt,
+    ServerHandler,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::*,
     schemars, tool, tool_handler, tool_router,
@@ -264,11 +264,44 @@ impl ServerHandler for RindaMcpServer {
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
+async fn health() -> axum::Json<serde_json::Value> {
+    axum::Json(serde_json::json!({"status": "ok"}))
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let server = RindaMcpServer::new();
-    let transport = rmcp::transport::stdio();
-    let service = server.serve(transport).await?;
-    service.waiting().await?;
+    use axum::routing::get;
+    use rmcp::transport::streamable_http_server::{
+        StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
+    };
+    use std::sync::Arc;
+    use tokio_util::sync::CancellationToken;
+
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(3000);
+
+    let ct = CancellationToken::new();
+    let service: StreamableHttpService<RindaMcpServer, LocalSessionManager> =
+        StreamableHttpService::new(
+            || Ok(RindaMcpServer::new()),
+            Arc::new(LocalSessionManager::default()),
+            StreamableHttpServerConfig {
+                stateful_mode: true,
+                cancellation_token: ct.child_token(),
+                ..Default::default()
+            },
+        );
+
+    let app = axum::Router::new()
+        .route("/health", get(health))
+        .nest_service("/mcp", service);
+
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
+    eprintln!("MCP server listening on 0.0.0.0:{port}");
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move { ct.cancelled_owned().await })
+        .await?;
     Ok(())
 }
