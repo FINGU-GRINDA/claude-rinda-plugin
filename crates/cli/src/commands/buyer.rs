@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::api_helper::{
     exit_api_error, get_authenticated_client, print_json, require_workspace_id,
 };
+use rinda_common::config::base_url;
 
 #[derive(Debug, Args)]
 pub struct BuyerArgs {
@@ -104,28 +105,52 @@ pub async fn run(args: BuyerArgs) {
     match args.command {
         BuyerCommands::Search {
             industry,
-            countries: _countries,
-            buyer_type: _buyer_type,
-            min_revenue: _min_revenue,
-            limit: _limit,
+            countries,
+            buyer_type,
+            min_revenue,
+            limit,
         } => {
             let workspace_id = require_workspace_id(&creds);
 
-            // Use the industry filter as the search query, or a default.
-            let query = industry.unwrap_or_else(|| "buyer search".to_string());
-
-            let body = rinda_sdk::types::PostApiV1LeadDiscoverySearchBody {
-                query,
-                workspace_id,
-                crawl_timeout_seconds: None,
-                locale: None,
-                session_id: None,
-                use_auto_timeout: true,
+            // Build natural-language query from filters.
+            let mut parts: Vec<String> = Vec::new();
+            if let Some(ind) = industry {
+                parts.push(ind);
+            }
+            if let Some(c) = countries {
+                parts.push(format!("countries:{c}"));
+            }
+            if let Some(bt) = buyer_type {
+                parts.push(format!("type:{bt}"));
+            }
+            if let Some(rev) = min_revenue {
+                parts.push(format!("min_revenue:{rev}"));
+            }
+            parts.push(format!("limit:{limit}"));
+            let query = if parts.len() == 1 {
+                // Only the limit part — use a default.
+                "buyer search".to_string()
+            } else {
+                parts.join(" ")
             };
 
-            match client.post_api_v1_lead_discovery_search(&body).await {
-                Ok(resp) => print_json(&resp.into_inner()),
-                Err(e) => exit_api_error("buyer search failed", e),
+            let body = serde_json::json!({
+                "query": query,
+                "workspaceId": workspace_id,
+                "useAutoTimeout": true,
+            });
+
+            match sse_search(&creds.access_token, &body).await {
+                Ok(result) => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".to_string())
+                    );
+                }
+                Err(e) => {
+                    eprintln!("buyer search failed: {e}");
+                    process::exit(1);
+                }
             }
         }
 
@@ -294,6 +319,102 @@ pub async fn run(args: BuyerArgs) {
     }
 
     process::exit(0);
+}
+
+/// Perform an SSE POST to `/lead-discovery/search` and collect events until
+/// a session_id is obtained or the stream ends.
+async fn sse_search(
+    access_token: &str,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    use futures_util::StreamExt;
+
+    let base = base_url();
+    let url = format!("{base}/api/v1/lead-discovery/search");
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Authorization", format!("Bearer {access_token}"))
+        .header("Accept", "text/event-stream")
+        .header("Content-Type", "application/json")
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| format!("HTTP request failed: {e}"))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("HTTP {status}: {text}"));
+    }
+
+    let mut stream = resp.bytes_stream();
+    let mut session_id: Option<String> = None;
+    let mut last_status: Option<String> = None;
+    let mut last_data: Option<serde_json::Value> = None;
+    let mut buf = String::new();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("stream read error: {e}"))?;
+        buf.push_str(&String::from_utf8_lossy(&chunk));
+
+        while let Some(pos) = buf.find("\n\n") {
+            let event_block = buf[..pos].to_string();
+            buf = buf[pos + 2..].to_string();
+
+            for line in event_block.lines() {
+                if let Some(data_str) = line
+                    .strip_prefix("data: ")
+                    .or_else(|| line.strip_prefix("data:"))
+                {
+                    let data_str = data_str.trim();
+                    if data_str == "[DONE]" {
+                        break;
+                    }
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data_str) {
+                        if session_id.is_none() {
+                            session_id = parsed
+                                .get("sessionId")
+                                .or_else(|| parsed.get("session_id"))
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+                        }
+                        if let Some(s) = parsed.get("status").and_then(|v| v.as_str()) {
+                            last_status = Some(s.to_string());
+                        }
+                        last_data = Some(parsed);
+                    }
+                }
+            }
+        }
+
+        if session_id.is_some() && last_status.is_some() {
+            break;
+        }
+    }
+
+    let mut result = serde_json::json!({});
+    if let Some(sid) = &session_id {
+        result["sessionId"] = serde_json::json!(sid);
+    }
+    if let Some(st) = &last_status {
+        result["status"] = serde_json::json!(st);
+    }
+    if let Some(data) = last_data {
+        result["lastEvent"] = data;
+    }
+
+    if let Some(sid) = &session_id {
+        println!("Search session started: {sid}");
+        println!("Use `rinda buyer status --session-id <id>` to check progress.");
+    } else {
+        result["warning"] = serde_json::json!(
+            "No session_id received from SSE stream. The search may not have started."
+        );
+    }
+
+    Ok(result)
 }
 
 /// Parse a JSON string into a `serde_json::Map` suitable for the clarify body.
