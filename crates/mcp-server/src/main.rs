@@ -388,7 +388,7 @@ impl RindaMcpServer {
     }
 
     #[tool(
-        description = "List workspaces for the authenticated user. Calls GET /api/v1/workspaces/user. No parameters required."
+        description = "List workspaces the authenticated user belongs to. No parameters required."
     )]
     async fn rinda_workspace_list(
         &self,

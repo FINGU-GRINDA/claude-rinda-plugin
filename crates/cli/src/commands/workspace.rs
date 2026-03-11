@@ -22,12 +22,10 @@ pub async fn run(args: WorkspaceArgs) {
     let (client, _creds) = get_authenticated_client().await;
 
     match args.command {
-        WorkspaceCommands::List => {
-            match client.get_api_v1_workspaces_user().await {
-                Ok(resp) => print_json(&resp.into_inner()),
-                Err(e) => exit_api_error("workspace list failed", e),
-            }
-        }
+        WorkspaceCommands::List => match client.get_api_v1_workspaces_user().await {
+            Ok(resp) => print_json(&resp.into_inner()),
+            Err(e) => exit_api_error("workspace list failed", e),
+        },
     }
 
     process::exit(0);
