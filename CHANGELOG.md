@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.1.7](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-plugin-v0.1.6...rinda-plugin-v0.1.7) (2026-03-11)
+
+
+### Features
+
+* add standalone bin/install.sh for MCP server ([#79](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/79)) ([#93](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/93)) ([a9dc65b](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/a9dc65b67bce38bd55d63689a44fbb1fc7f087e1))
+* **ci:** build and distribute MCP server binary ([#91](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/91)) ([b90f5a7](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/b90f5a7c8299bba77ac87551ae0efdc77565c55b))
+* **mcp:** adapt OAuth flow to use /cli-auth callback redirect ([#108](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/108)) ([138cbb8](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/138cbb873f013e5cd75b6bf685f850e2e7b16b22))
+* **mcp:** convert MCP server from stdio to remote HTTP transport ([#97](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/97)) ([e572564](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/e5725644a2983bcd40fd4ad671725b70f9977200))
+* **mcp:** Dockerfile and Dokploy deployment config ([#100](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/100)) ([1512f54](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/1512f5440e6627aa7bd539c0021ca8efe46700d4))
+* **mcp:** implement all 15 MCP tools ([#89](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/89)) ([a9aee9d](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/a9aee9d0a7b0d63363303d3475f67bf9973d771f))
+* **mcp:** implement OAuth 2.0 authentication flow ([#99](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/99)) ([ad408ad](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/ad408adc51936005e564d5f6dcf576c6a87e5c22))
+* **mcp:** refactor auth from local credentials to Bearer token passthrough ([#98](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/98)) ([abee769](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/abee769d33e9fb7cf781457dfc44a8b21c696d6e))
+* **mcp:** scaffold MCP server crate ([#88](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/88)) ([349f4f4](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/349f4f42dead834a67762b83d5bf00d5c1e53f8c))
+* **plugin:** register MCP server in plugin.json ([#90](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/90)) ([b482cb9](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/b482cb92ac6cbfe59d9388ca953524d0e60cf3b8))
+
+
+### Bug Fixes
+
+* **mcp:** add RFC 9728 protected resource metadata for OAuth discovery ([#105](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/105)) ([7aebd91](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/7aebd91ede1a880e4fe41a553e799c7ed053aa5b))
+* **mcp:** remove bare OAuth URL from auth_login response ([#103](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/103)) ([325ddf5](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/325ddf5d182a371b70609240e199f5ea17c98495))
+* **mcp:** remove redundant rinda_auth_login tool ([#106](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/106)) ([6513eb4](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/6513eb40e33610a92de0ea5ae4554ef2f2538f51))
+* **mcp:** replace broken /cli-auth with OAuth authorize endpoint ([#101](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/101)) ([58a905b](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/58a905b693503a20b07407d0e983e2c144440a01))
+* **mcp:** serve MCP endpoint at root path instead of /mcp ([#104](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/104)) ([e04e465](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/e04e4659426518383a04f92eba9439d35434f808))
+
+
+### Refactoring
+
+* extract shared crate (crates/common) ([#86](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/86)) ([3b34e3b](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/3b34e3bbb0b890fc65ec7920ecbb08563fdc8d7e))
+
+
+### Documentation
+
+* update install.sh references and docs for MCP server ([#85](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/85)) ([#92](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/92)) ([a727265](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/a72726548df92c15a6ac39edb43deeeafc146fdd))
+
 ## [0.1.6](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-plugin-v0.1.5...rinda-plugin-v0.1.6) (2026-03-10)
 
 
