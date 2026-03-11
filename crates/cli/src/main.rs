@@ -29,6 +29,8 @@ enum Commands {
     Reply(commands::reply::ReplyArgs),
     /// Sequence management commands
     Sequence(commands::sequence::SequenceArgs),
+    /// Workspace management commands
+    Workspace(commands::workspace::WorkspaceArgs),
 }
 
 #[tokio::main]
