@@ -386,6 +386,20 @@ impl RindaMcpServer {
         let auth = require_auth!(parts);
         tools::order::order_history(&auth, p.buyer_id, p.days_inactive).await
     }
+
+    #[tool(
+        description = "List workspaces for the authenticated user. Calls GET /api/v1/workspaces/user. No parameters required."
+    )]
+    async fn rinda_workspace_list(
+        &self,
+        rmcp::handler::server::tool::Extension(parts): rmcp::handler::server::tool::Extension<
+            http::request::Parts,
+        >,
+        Parameters(_): Parameters<EmptyParams>,
+    ) -> String {
+        let auth = require_auth!(parts);
+        tools::workspace::workspace_list(&auth).await
+    }
 }
 
 // ── ServerHandler implementation ─────────────────────────────────────────────

@@ -167,9 +167,7 @@ pub async fn buyer_messages(auth: &AuthContext, session_id: String) -> String {
         .await
     {
         Ok(resp) => json_to_text(&resp.into_inner()),
-        Err(e) => {
-            serde_json::json!({ "error": format!("buyer messages failed: {e}") }).to_string()
-        }
+        Err(e) => serde_json::json!({ "error": format!("buyer messages failed: {e}") }).to_string(),
     }
 }
 
