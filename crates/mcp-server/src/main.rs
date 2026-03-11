@@ -1,4 +1,5 @@
 mod auth;
+mod oauth;
 mod tools;
 
 use rmcp::{
@@ -388,6 +389,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|p| p.parse().ok())
         .unwrap_or(3000);
 
+    let server_url =
+        std::env::var("MCP_SERVER_URL").unwrap_or_else(|_| format!("http://localhost:{port}"));
+
+    let rinda_base_url = rinda_common::config::base_url().to_string();
+
+    let oauth_state = Arc::new(oauth::OAuthState::new(rinda_base_url, server_url));
+
     let ct = CancellationToken::new();
     let service: StreamableHttpService<RindaMcpServer, LocalSessionManager> =
         StreamableHttpService::new(
@@ -402,7 +410,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = axum::Router::new()
         .route("/health", get(health))
-        .nest_service("/mcp", service);
+        .route(
+            "/.well-known/oauth-authorization-server",
+            get(oauth::metadata),
+        )
+        .route("/oauth/authorize", get(oauth::authorize))
+        .route("/oauth/callback", get(oauth::oauth_callback))
+        .route("/oauth/token", axum::routing::post(oauth::token))
+        .route("/oauth/register", axum::routing::post(oauth::register))
+        .with_state(oauth_state.clone())
+        .nest_service(
+            "/mcp",
+            tower::ServiceBuilder::new()
+                .layer(axum::middleware::from_fn_with_state(
+                    oauth_state,
+                    oauth::auth_middleware,
+                ))
+                .service(service),
+        );
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await?;
     eprintln!("MCP server listening on 0.0.0.0:{port}");
