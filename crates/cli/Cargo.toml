@@ -1,6 +1,6 @@
 [package]
 name = "rinda-cli"
-version = "0.1.8" # x-release-please-version
+version = "0.1.9" # x-release-please-version
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
