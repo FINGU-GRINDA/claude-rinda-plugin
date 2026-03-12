@@ -73,10 +73,18 @@ pub struct AuthCode {
 #[derive(Clone, Debug)]
 pub struct SessionTokens {
     pub rinda_access_token: String,
+    /// RINDA refresh token — kept so the middleware can auto-rotate the JWT.
+    pub rinda_refresh_token: String,
     pub expires_at: DateTime<Utc>,
     // Stored for audit/debugging purposes.
     #[allow(dead_code)]
     pub created_at: DateTime<Utc>,
+    /// Workspace ID fetched from /auth/me (not from JWT claims).
+    pub workspace_id: String,
+    /// User ID fetched from /auth/me.
+    pub user_id: String,
+    /// Email fetched from /auth/me.
+    pub email: String,
 }
 
 /// A dynamically registered client (keyed by client_id).
@@ -93,9 +101,15 @@ pub struct ClientRegistration {
     pub client_name: String,
 }
 
-/// Newtype carrying a validated RINDA access token, injected by auth middleware.
+/// Injected by auth middleware when a valid session is found.
+/// Contains the RINDA access token plus user profile data from /auth/me.
 #[derive(Clone, Debug)]
-pub struct AuthenticatedToken(pub String);
+pub struct AuthenticatedToken {
+    pub rinda_access_token: String,
+    pub workspace_id: String,
+    pub user_id: String,
+    pub email: String,
+}
 
 /// Shared state injected into all OAuth route handlers via axum State.
 #[derive(Clone, Debug)]
@@ -131,22 +145,115 @@ impl OAuthState {
 
     /// Look up a session by its access token.
     /// Returns `Some(rinda_access_token)` if valid, `None` if missing/expired.
-    pub fn validate_session(&self, access_token: &str) -> Option<String> {
+    pub fn validate_session(&self, access_token: &str) -> Option<AuthenticatedToken> {
         let entry = self.sessions.get(access_token)?;
         if Utc::now() >= entry.expires_at {
             return None;
         }
-        Some(entry.rinda_access_token.clone())
+        Some(AuthenticatedToken {
+            rinda_access_token: entry.rinda_access_token.clone(),
+            workspace_id: entry.workspace_id.clone(),
+            user_id: entry.user_id.clone(),
+            email: entry.email.clone(),
+        })
+    }
+
+    /// Validate session and auto-refresh the RINDA JWT if it's expired or
+    /// about to expire (within 5 minutes). This keeps tool calls working
+    /// without requiring the MCP client to explicitly refresh.
+    pub async fn validate_and_refresh_session(
+        &self,
+        session_token: &str,
+    ) -> Option<AuthenticatedToken> {
+        // Check the session exists and hasn't expired.
+        let entry = self.sessions.get(session_token)?;
+        if Utc::now() >= entry.expires_at {
+            return None;
+        }
+
+        // Check if the underlying RINDA JWT needs refreshing (expired or < 5 min left).
+        let rinda_jwt_ok = is_rinda_jwt_valid(&entry.rinda_access_token);
+        if rinda_jwt_ok {
+            return Some(AuthenticatedToken {
+                rinda_access_token: entry.rinda_access_token.clone(),
+                workspace_id: entry.workspace_id.clone(),
+                user_id: entry.user_id.clone(),
+                email: entry.email.clone(),
+            });
+        }
+
+        // JWT expired — attempt refresh using the stored RINDA refresh token.
+        let refresh_token = entry.rinda_refresh_token.clone();
+        let workspace_id = entry.workspace_id.clone();
+        let user_id = entry.user_id.clone();
+        let email = entry.email.clone();
+        drop(entry); // release DashMap ref before async work
+
+        if refresh_token.is_empty() {
+            return None;
+        }
+
+        let client = rinda_sdk::Client::new(&self.base_url);
+        let body = rinda_sdk::types::PostApiV1AuthRefreshBody {
+            refresh_token: refresh_token.clone(),
+        };
+        let resp = match client.post_api_v1_auth_refresh(&body).await {
+            Ok(r) => r.into_inner(),
+            Err(e) => {
+                eprintln!("Auto-refresh failed: {e}");
+                return None;
+            }
+        };
+
+        let data = resp
+            .get("data")
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_else(|| resp.clone().into_iter().collect());
+
+        let new_access = data.get("token").and_then(|v| v.as_str())?.to_string();
+        let new_refresh = data
+            .get("refreshToken")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&refresh_token)
+            .to_string();
+
+        // Update the session in-place with the fresh tokens.
+        if let Some(mut entry) = self.sessions.get_mut(session_token) {
+            entry.rinda_access_token = new_access.clone();
+            entry.rinda_refresh_token = new_refresh;
+        }
+
+        // Also update any opaque refresh token mapping so the client's next
+        // explicit refresh still works.
+
+        Some(AuthenticatedToken {
+            rinda_access_token: new_access,
+            workspace_id,
+            user_id,
+            email,
+        })
     }
 
     /// Store a new session and return the opaque session access token.
-    pub fn create_session(&self, rinda_access_token: String) -> String {
+    pub fn create_session(
+        &self,
+        rinda_access_token: String,
+        rinda_refresh_token: String,
+        workspace_id: String,
+        user_id: String,
+        email: String,
+    ) -> String {
         let token = Uuid::new_v4().to_string();
         let now = Utc::now();
         self.sessions.insert(
             token.clone(),
             SessionTokens {
                 rinda_access_token,
+                rinda_refresh_token,
+                workspace_id,
+                user_id,
+                email,
                 expires_at: now + chrono::Duration::seconds(SESSION_TTL_SECS),
                 created_at: now,
             },
@@ -168,6 +275,103 @@ impl OAuthState {
     }
 }
 
+// ── User profile helper ──────────────────────────────────────────────────────
+
+/// Build an authenticated SDK client for the given base URL and access token.
+fn authed_sdk_client(
+    base_url: &str,
+    access_token: &str,
+) -> Result<rinda_sdk::Client, String> {
+    let auth_value = format!("Bearer {access_token}");
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        reqwest::header::AUTHORIZATION,
+        reqwest::header::HeaderValue::from_str(&auth_value)
+            .map_err(|e| format!("Invalid token header: {e}"))?,
+    );
+    let reqwest_client = reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {e}"))?;
+    Ok(rinda_sdk::Client::new_with_client(base_url, reqwest_client))
+}
+
+/// Fetch user profile from /auth/me and workspace ID from /workspaces/user.
+/// Returns (workspace_id, user_id, email).
+///
+/// The RINDA JWT does NOT contain a workspaceId claim, and /auth/me does not
+/// return it either. The workspace ID must be fetched from /workspaces/user
+/// (which returns the list of workspaces the user belongs to).
+async fn fetch_user_profile(
+    base_url: &str,
+    access_token: &str,
+) -> Result<(String, String, String), String> {
+    let client = authed_sdk_client(base_url, access_token)?;
+
+    // Fetch user identity from /auth/me.
+    let me_resp = client
+        .get_api_v1_auth_me()
+        .await
+        .map_err(|e| format!("Failed to fetch user profile: {e}"))?
+        .into_inner();
+
+    // Response shape: { data: { user: { id, email, workspaceId?, ... } } }
+    let user = me_resp
+        .get("data")
+        .and_then(|d| d.get("user"))
+        .cloned()
+        .unwrap_or(serde_json::Value::Object(me_resp.clone()));
+
+    let user_id = user
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let email = user
+        .get("email")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    // Try workspaceId from /auth/me first (may not be present).
+    let mut workspace_id = user
+        .get("workspaceId")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    // If /auth/me didn't include workspaceId, fetch from /workspaces/user.
+    if workspace_id.is_empty() {
+        if let Ok(ws_resp) = client.get_api_v1_workspaces_user().await {
+            let ws_data = ws_resp.into_inner();
+            // Response shape: { data: [ { id, name, ownerId, ... }, ... ] }
+            workspace_id = ws_data
+                .get("data")
+                .and_then(|d| d.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|ws| ws.get("id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+        }
+    }
+
+    Ok((workspace_id, user_id, email))
+}
+
+// ── JWT expiry check ─────────────────────────────────────────────────────────
+
+/// Returns `true` if the RINDA JWT is valid for at least 5 more minutes.
+fn is_rinda_jwt_valid(token: &str) -> bool {
+    let exp_ms = rinda_common::credentials::extract_exp_from_jwt(token);
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    let buffer_ms: i64 = 5 * 60 * 1000; // 5 minutes
+    exp_ms - now_ms > buffer_ms
+}
+
 // ── Auth middleware ────────────────────────────────────────────────────────────
 
 /// Axum middleware that reads `Authorization: Bearer <token>`, validates it
@@ -182,10 +386,11 @@ pub async fn auth_middleware(
     mut req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> Response {
-    if let Some(token) = extract_bearer_token(req.headers())
-        && let Some(rinda_token) = state.validate_session(&token)
-    {
-        req.extensions_mut().insert(AuthenticatedToken(rinda_token));
+    if let Some(token) = extract_bearer_token(req.headers()) {
+        // Try session validation with auto-refresh of the underlying RINDA JWT.
+        if let Some(authenticated) = state.validate_and_refresh_session(&token).await {
+            req.extensions_mut().insert(authenticated);
+        }
         // If token was present but invalid, fall through without AuthenticatedToken.
         // The tool handler will decide whether to reject.
     }
@@ -617,8 +822,28 @@ async fn handle_auth_code_grant(state: Arc<OAuthState>, req: TokenRequest) -> Re
     let rinda_refresh_token = entry.rinda_refresh_token.clone();
     drop(entry);
 
-    // Create a session token (no raw refresh token stored in session).
-    let session_token = state.create_session(rinda_access_token);
+    // Fetch user profile from /auth/me to get workspace_id (not in JWT claims).
+    let (workspace_id, user_id, email) =
+        match fetch_user_profile(&state.base_url, &rinda_access_token).await {
+            Ok(profile) => profile,
+            Err(e) => {
+                eprintln!("Failed to fetch user profile during token exchange: {e}");
+                // Fall back to JWT extraction so auth doesn't completely break.
+                let ctx = crate::auth::extract_auth_context_from_jwt(&rinda_access_token)
+                    .unwrap_or_default();
+                (ctx.workspace_id, ctx.user_id, ctx.email)
+            }
+        };
+
+    // Create a session — store the RINDA refresh token so the middleware can
+    // auto-rotate the JWT when it expires.
+    let session_token = state.create_session(
+        rinda_access_token,
+        rinda_refresh_token.clone(),
+        workspace_id,
+        user_id,
+        email,
+    );
 
     // Generate opaque refresh token — the real RINDA refresh token is NOT returned to the client.
     let opaque_refresh_token = state.create_opaque_refresh_token(rinda_refresh_token);
@@ -695,7 +920,25 @@ async fn handle_refresh_token_grant(state: Arc<OAuthState>, req: TokenRequest) -
         .unwrap_or(&rinda_refresh_token)
         .to_string();
 
-    let session_token = state.create_session(new_access);
+    // Fetch user profile from /auth/me to get workspace_id.
+    let (workspace_id, user_id, email) =
+        match fetch_user_profile(&state.base_url, &new_access).await {
+            Ok(profile) => profile,
+            Err(e) => {
+                eprintln!("Failed to fetch user profile during token refresh: {e}");
+                let ctx = crate::auth::extract_auth_context_from_jwt(&new_access)
+                    .unwrap_or_default();
+                (ctx.workspace_id, ctx.user_id, ctx.email)
+            }
+        };
+
+    let session_token = state.create_session(
+        new_access,
+        new_rinda_refresh.clone(),
+        workspace_id,
+        user_id,
+        email,
+    );
 
     // Issue new opaque refresh token for the new RINDA refresh token.
     let new_opaque_refresh = state.create_opaque_refresh_token(new_rinda_refresh);
@@ -810,10 +1053,13 @@ pub fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
 }
 
 /// Validate a Bearer token against the session store.
-/// Returns `Ok(rinda_access_token)` if valid.
+/// Returns `Ok(AuthenticatedToken)` if valid.
 /// Returns `Err(Response)` with 401 if invalid/expired.
 #[allow(clippy::result_large_err, dead_code)]
-pub fn validate_bearer(state: &Arc<OAuthState>, headers: &HeaderMap) -> Result<String, Response> {
+pub fn validate_bearer(
+    state: &Arc<OAuthState>,
+    headers: &HeaderMap,
+) -> Result<AuthenticatedToken, Response> {
     let token = match extract_bearer_token(headers) {
         Some(t) => t,
         None => {
@@ -830,7 +1076,7 @@ pub fn validate_bearer(state: &Arc<OAuthState>, headers: &HeaderMap) -> Result<S
     };
 
     match state.validate_session(&token) {
-        Some(rinda_token) => Ok(rinda_token),
+        Some(authenticated) => Ok(authenticated),
         None => Err((
             StatusCode::UNAUTHORIZED,
             [(
@@ -1088,19 +1334,28 @@ mod tests {
     #[test]
     fn test_session_create_and_validate() {
         let state = make_state();
-        let session_token = state.create_session("rinda-access-123".to_string());
+        let session_token = state.create_session(
+            "rinda-access-123".to_string(),
+            "rinda-refresh-123".to_string(),
+            "ws-123".to_string(),
+            "user-123".to_string(),
+            "test@example.com".to_string(),
+        );
         assert!(
             !session_token.is_empty(),
             "session token should not be empty"
         );
 
-        let rinda_token = state.validate_session(&session_token);
-        assert!(rinda_token.is_some(), "valid session should be found");
+        let authenticated = state.validate_session(&session_token);
+        assert!(authenticated.is_some(), "valid session should be found");
+        let auth = authenticated.unwrap();
         assert_eq!(
-            rinda_token.unwrap(),
-            "rinda-access-123",
+            auth.rinda_access_token, "rinda-access-123",
             "should return the RINDA access token"
         );
+        assert_eq!(auth.workspace_id, "ws-123");
+        assert_eq!(auth.user_id, "user-123");
+        assert_eq!(auth.email, "test@example.com");
     }
 
     #[test]
@@ -1245,7 +1500,13 @@ mod tests {
     #[test]
     fn test_validate_bearer_valid_token_returns_rinda_token() {
         let state = make_state();
-        let session_token = state.create_session("rinda-access-abc".to_string());
+        let session_token = state.create_session(
+            "rinda-access-abc".to_string(),
+            "rinda-refresh-abc".to_string(),
+            "ws-abc".to_string(),
+            "user-abc".to_string(),
+            "abc@example.com".to_string(),
+        );
         let mut headers = HeaderMap::new();
         headers.insert(
             axum::http::header::AUTHORIZATION,
@@ -1253,7 +1514,9 @@ mod tests {
         );
         let result = validate_bearer(&state, &headers);
         assert!(result.is_ok(), "valid Bearer token should be accepted");
-        assert_eq!(result.unwrap(), "rinda-access-abc");
+        let auth = result.unwrap();
+        assert_eq!(auth.rinda_access_token, "rinda-access-abc");
+        assert_eq!(auth.workspace_id, "ws-abc");
     }
 
     // ── AuthenticatedToken injection (BLOCKER 1) ──────────────────────────────
@@ -1261,11 +1524,16 @@ mod tests {
     /// Acceptance criteria: auth middleware inserts AuthenticatedToken for valid session (issue #95).
     #[test]
     fn test_authenticated_token_struct() {
-        let token = AuthenticatedToken("rinda-token-xyz".to_string());
-        assert_eq!(token.0, "rinda-token-xyz");
+        let token = AuthenticatedToken {
+            rinda_access_token: "rinda-token-xyz".to_string(),
+            workspace_id: "ws-test".to_string(),
+            user_id: "user-test".to_string(),
+            email: "test@example.com".to_string(),
+        };
+        assert_eq!(token.rinda_access_token, "rinda-token-xyz");
         // Verify Clone works (needed for axum extension).
         let cloned = token.clone();
-        assert_eq!(cloned.0, "rinda-token-xyz");
+        assert_eq!(cloned.rinda_access_token, "rinda-token-xyz");
     }
 
     // ── Integration test: OAuth HTTP endpoints ────────────────────────────────
