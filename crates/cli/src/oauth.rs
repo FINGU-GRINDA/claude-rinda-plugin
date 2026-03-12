@@ -177,11 +177,27 @@ pub async fn run_oauth_flow() -> Result<Credentials> {
         .and_then(|v| v.as_str())
         .unwrap_or_default()
         .to_string();
-    let workspace_id = user
+    // Try workspaceId from /auth/me first (may not be present in newer API versions).
+    let mut workspace_id = user
         .get("workspaceId")
         .and_then(|v| v.as_str())
         .unwrap_or_default()
         .to_string();
+
+    // If /auth/me didn't include workspaceId, fetch from /workspaces/user.
+    if workspace_id.is_empty() {
+        if let Ok(ws_resp) = authed_client.get_api_v1_workspaces_user().await {
+            let ws_data = ws_resp.into_inner();
+            workspace_id = ws_data
+                .get("data")
+                .and_then(|d| d.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|ws| ws.get("id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+        }
+    }
 
     Ok(Credentials {
         access_token,

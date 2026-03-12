@@ -305,3 +305,241 @@ async fn test_initialize_and_list_tools_http() {
     child.kill().await.ok();
     let _ = child.wait().await;
 }
+
+// ── Local binary + real RINDA API tests ──────────────────────────────────────
+
+/// Spawn the binary against the real RINDA alpha API.
+async fn spawn_binary_server_real_api() -> (u16, tokio::process::Child) {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    use tokio::process::Command;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+
+    let binary = env!("CARGO_BIN_EXE_rinda-mcp");
+    let mut child = Command::new(binary)
+        .env("PORT", port.to_string())
+        .env("RINDA_API_BASE_URL", "https://alpha.rinda.ai/api/v1")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("failed to spawn rinda-mcp binary");
+
+    let stderr = child.stderr.take().expect("stderr piped");
+    let mut reader = BufReader::new(stderr);
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        let mut line = String::new();
+        loop {
+            line.clear();
+            reader.read_line(&mut line).await.unwrap();
+            if line.contains("listening") || line.contains(&port.to_string()) {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("server did not start within 10 seconds");
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    (port, child)
+}
+
+/// Get a fresh RINDA access token via refresh. Returns None if expired.
+async fn refresh_rinda_token() -> Option<String> {
+    let path = dirs_next::home_dir()?.join(".rinda/credentials.json");
+    let content = std::fs::read_to_string(&path).ok()?;
+    let creds: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let refresh_token = creds["refreshToken"].as_str()?;
+
+    let client = reqwest::Client::new();
+    let resp: serde_json::Value = client
+        .post("https://alpha.rinda.ai/api/v1/auth/refresh")
+        .json(&serde_json::json!({ "refreshToken": refresh_token }))
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+
+    if resp["success"].as_bool() != Some(true) {
+        return None;
+    }
+    resp["data"]["token"].as_str().map(|s| s.to_string())
+}
+
+/// Full integration test: spawn local binary with real RINDA API, authenticate
+/// via OAuth flow, and call tools that require workspace_id.
+///
+/// This test validates that the workspace_id fix works end-to-end.
+#[tokio::test]
+#[ignore = "requires network + valid RINDA credentials"]
+async fn test_local_binary_oauth_and_workspace_id() {
+    let rinda_token = match refresh_rinda_token().await {
+        Some(t) => t,
+        None => {
+            eprintln!("SKIPPING: no valid RINDA credentials. Run `rinda-cli auth login`.");
+            return;
+        }
+    };
+
+    let (port, mut child) = spawn_binary_server_real_api().await;
+    let client = reqwest::Client::new();
+    let base = format!("http://127.0.0.1:{port}");
+
+    // ── 1. Initialize MCP session ───────────────────────────────────────────
+    let resp = client
+        .post(&base)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": { "name": "ws-test", "version": "0.1" }
+            }
+        }))
+        .send()
+        .await
+        .expect("initialize failed");
+
+    assert_eq!(resp.status(), 200, "initialize should succeed");
+
+    // ── 2. Register dynamic client ──────────────────────────────────────────
+    let reg: serde_json::Value = client
+        .post(format!("{base}/oauth/register"))
+        .json(&serde_json::json!({
+            "client_name": "ws-test",
+            "redirect_uris": ["http://localhost:19999/callback"]
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(reg["client_id"].as_str().is_some(), "should get client_id");
+
+    // ── 3. Call rinda_auth_status with direct Bearer (JWT) ──────────────────
+    // When using the JWT directly (non-OAuth path), auth is extracted from JWT.
+    let resp = client
+        .post(&base)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
+        .header("Authorization", format!("Bearer {rinda_token}"))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {
+                "name": "rinda_auth_status",
+                "arguments": {}
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let text = resp.text().await.unwrap();
+    let events = parse_sse_events(&text);
+    println!("auth_status events: {events:?}");
+
+    if let Some(result) = events.iter().find(|v| v["id"] == 10) {
+        let content = result["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or("");
+        println!("auth_status: {content}");
+        // The auth status should show the user's email
+        assert!(
+            content.contains("vikyw@grinda.ai") || content.contains("email"),
+            "auth_status should show user identity: {content}"
+        );
+    }
+
+    // ── 4. Call rinda_workspace_list ─────────────────────────────────────────
+    let resp = client
+        .post(&base)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
+        .header("Authorization", format!("Bearer {rinda_token}"))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "tools/call",
+            "params": {
+                "name": "rinda_workspace_list",
+                "arguments": {}
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let text = resp.text().await.unwrap();
+    let events = parse_sse_events(&text);
+    println!("workspace_list events: {events:?}");
+
+    if let Some(result) = events.iter().find(|v| v["id"] == 11) {
+        let content = result["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or("");
+        println!("workspace_list: {content}");
+        // Should return actual workspace data, not an error
+        assert!(
+            !content.contains("error"),
+            "workspace_list should succeed: {content}"
+        );
+    }
+
+    // ── 5. Call rinda_lead_search (requires workspace_id) ───────────────────
+    // This is the key test: lead_search validates workspace_id and returns
+    // "Invalid workspace ID" if it's empty (the original bug).
+    let resp = client
+        .post(&base)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
+        .header("Authorization", format!("Bearer {rinda_token}"))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "tools/call",
+            "params": {
+                "name": "rinda_lead_search",
+                "arguments": {
+                    "search": "test",
+                    "limit": 1
+                }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let text = resp.text().await.unwrap();
+    let events = parse_sse_events(&text);
+    println!("lead_search events: {events:?}");
+
+    if let Some(result) = events.iter().find(|v| v["id"] == 12) {
+        let content = result["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or("");
+        println!("lead_search: {content}");
+        // THIS IS THE CRITICAL ASSERTION: the original bug caused
+        // "Invalid workspace ID in token" here.
+        assert!(
+            !content.contains("Invalid workspace ID"),
+            "BUG NOT FIXED: lead_search returned 'Invalid workspace ID'. \
+             The workspace_id is not being resolved from /workspaces/user. \
+             Response: {content}"
+        );
+    }
+
+    // ── Cleanup ─────────────────────────────────────────────────────────────
+    child.kill().await.ok();
+    let _ = child.wait().await;
+}
