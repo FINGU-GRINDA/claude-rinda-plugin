@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.9](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-plugin-v0.1.8...rinda-plugin-v0.1.9) (2026-03-12)
+
+
+### Bug Fixes
+
+* **ci:** use cross for aarch64-linux-musl to fix glibc link errors ([#128](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/128)) ([c625f73](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/c625f73b19e4bdc4e2a787d5cf8eacd760834875))
+* **mcp,cli:** cargo fmt and clippy fixes for [#130](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/130) ([#131](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/131)) ([ac8d01a](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/ac8d01ab20bb84dd9354107926d89da7221bf729))
+* **mcp:** resolve workspace ID and auto-refresh RINDA JWT ([#130](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/130)) ([fc99ac1](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/fc99ac11973bf19b7cffc8e13f6ff39723224961))
+
 ## [0.1.8](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-plugin-v0.1.7...rinda-plugin-v0.1.8) (2026-03-11)
 
 
