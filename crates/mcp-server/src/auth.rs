@@ -13,7 +13,7 @@ pub const NOT_AUTHENTICATED_MSG: &str =
 /// Authentication context extracted from the HTTP Bearer token.
 /// Holds all identity information decoded from the JWT payload without
 /// requiring a local credentials file.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct AuthContext {
     pub access_token: String,
     pub workspace_id: String,
@@ -33,9 +33,14 @@ pub struct AuthContext {
 /// - The JWT payload is not valid JSON.
 pub fn extract_auth_from_parts(parts: &http::request::Parts) -> Result<AuthContext, String> {
     // First check if the OAuth middleware injected an AuthenticatedToken.
-    // This contains the real RINDA JWT (resolved from the opaque session token).
+    // This contains the real RINDA JWT plus user profile data fetched from /auth/me.
     if let Some(authenticated) = parts.extensions.get::<crate::oauth::AuthenticatedToken>() {
-        return extract_auth_context_from_jwt(&authenticated.0);
+        return Ok(AuthContext {
+            access_token: authenticated.rinda_access_token.clone(),
+            workspace_id: authenticated.workspace_id.clone(),
+            user_id: authenticated.user_id.clone(),
+            email: authenticated.email.clone(),
+        });
     }
 
     // Fall back to reading the raw Authorization Bearer header (direct JWT).
