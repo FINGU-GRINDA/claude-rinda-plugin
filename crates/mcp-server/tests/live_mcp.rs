@@ -141,7 +141,9 @@ async fn live_oauth_discovery() {
 
     // Authorization server metadata
     let resp: Value = client
-        .get(format!("{ALPHA_MCP}/.well-known/oauth-authorization-server"))
+        .get(format!(
+            "{ALPHA_MCP}/.well-known/oauth-authorization-server"
+        ))
         .send()
         .await
         .unwrap()
@@ -214,7 +216,10 @@ async fn live_mcp_initialize_and_tools_list() {
     .await;
     assert_eq!(status, 200, "initialize should return 200");
 
-    let init = events.iter().find(|v| v["id"] == 1).expect("no init response");
+    let init = events
+        .iter()
+        .find(|v| v["id"] == 1)
+        .expect("no init response");
     assert!(init["error"].is_null(), "init error: {:?}", init["error"]);
     assert_eq!(init["result"]["serverInfo"]["name"], "rinda-mcp");
 
@@ -354,10 +359,7 @@ async fn live_workspaces_user_returns_workspace_id() {
     let ws_id = workspaces[0]["id"]
         .as_str()
         .expect("workspace should have id");
-    assert!(
-        !ws_id.is_empty(),
-        "workspace id should not be empty"
-    );
+    assert!(!ws_id.is_empty(), "workspace id should not be empty");
     println!("Workspace ID from /workspaces/user: {ws_id}");
 }
 
