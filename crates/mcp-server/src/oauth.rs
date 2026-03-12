@@ -278,10 +278,7 @@ impl OAuthState {
 // ── User profile helper ──────────────────────────────────────────────────────
 
 /// Build an authenticated SDK client for the given base URL and access token.
-fn authed_sdk_client(
-    base_url: &str,
-    access_token: &str,
-) -> Result<rinda_sdk::Client, String> {
+fn authed_sdk_client(base_url: &str, access_token: &str) -> Result<rinda_sdk::Client, String> {
     let auth_value = format!("Bearer {access_token}");
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
@@ -341,19 +338,19 @@ async fn fetch_user_profile(
         .to_string();
 
     // If /auth/me didn't include workspaceId, fetch from /workspaces/user.
-    if workspace_id.is_empty() {
-        if let Ok(ws_resp) = client.get_api_v1_workspaces_user().await {
-            let ws_data = ws_resp.into_inner();
-            // Response shape: { data: [ { id, name, ownerId, ... }, ... ] }
-            workspace_id = ws_data
-                .get("data")
-                .and_then(|d| d.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|ws| ws.get("id"))
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-        }
+    if workspace_id.is_empty()
+        && let Ok(ws_resp) = client.get_api_v1_workspaces_user().await
+    {
+        let ws_data = ws_resp.into_inner();
+        // Response shape: { data: [ { id, name, ownerId, ... }, ... ] }
+        workspace_id = ws_data
+            .get("data")
+            .and_then(|d| d.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|ws| ws.get("id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
     }
 
     Ok((workspace_id, user_id, email))
@@ -921,16 +918,16 @@ async fn handle_refresh_token_grant(state: Arc<OAuthState>, req: TokenRequest) -
         .to_string();
 
     // Fetch user profile from /auth/me to get workspace_id.
-    let (workspace_id, user_id, email) =
-        match fetch_user_profile(&state.base_url, &new_access).await {
-            Ok(profile) => profile,
-            Err(e) => {
-                eprintln!("Failed to fetch user profile during token refresh: {e}");
-                let ctx = crate::auth::extract_auth_context_from_jwt(&new_access)
-                    .unwrap_or_default();
-                (ctx.workspace_id, ctx.user_id, ctx.email)
-            }
-        };
+    let (workspace_id, user_id, email) = match fetch_user_profile(&state.base_url, &new_access)
+        .await
+    {
+        Ok(profile) => profile,
+        Err(e) => {
+            eprintln!("Failed to fetch user profile during token refresh: {e}");
+            let ctx = crate::auth::extract_auth_context_from_jwt(&new_access).unwrap_or_default();
+            (ctx.workspace_id, ctx.user_id, ctx.email)
+        }
+    };
 
     let session_token = state.create_session(
         new_access,
