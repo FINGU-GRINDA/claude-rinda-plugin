@@ -1,0 +1,1 @@
+const awsKey = "AKIAOOONGLCN7FRHYLIX";
