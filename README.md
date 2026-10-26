@@ -4,6 +4,9 @@
 
 **[한국어 README 보기 (Korean)](./README.ko.md)**
 
+## 요약
+RINDA(린다) AI 의 B2B 수출 영업 자동화 기능을 Claude Code 에서 쓰게 해 주는 공개 플러그인 마켓플레이스다. `rinda-ai` 플러그인을 설치하면 해외 바이어 검색, 연락처 보강, 이메일 시퀀스 캠페인, 답장 분류, 캠페인 리포트를 자연어로 요청할 수 있다. Rust 로 만든 `rinda-cli`(인증·API 호출)와 `rinda-mcp`(OAuth 를 지원하는 HTTP MCP 서버)가 같은 워크스페이스에 있고, OpenAPI 스펙에서 생성한 SDK 를 공유한다. release-please 로 버전을 매기고 Linux·macOS·Windows 바이너리를 배포한다.
+
 ---
 
 ## Quick Start
@@ -95,6 +98,7 @@ plugins/
     skills/
       rinda/
         SKILL.md            # Main skill (CLI commands + workflows)
+        scripts/install.sh  # Installer run by the SessionStart hook
         references/
           buyer-qualification.md
           email-writing.md
@@ -103,8 +107,10 @@ bin/
   install.sh                # CLI + MCP server installer (cross-platform)
 crates/
   cli/                      # rinda-cli (Rust, handles auth + API)
+  common/                   # rinda-common (shared code for CLI and MCP server)
   sdk/                      # Auto-generated from OpenAPI spec
   mcp-server/               # rinda-mcp (Rust, HTTP MCP server with OAuth)
+doc/                        # Architecture, flows, CLI/API status, openapi.json
 ```
 
 ### CLI
@@ -115,7 +121,7 @@ The `rinda-cli` binary handles authentication and all API calls. It installs to 
 
 The `rinda-mcp` binary provides an MCP tool interface auto-discovered by Claude Code via `plugin.json`. It installs to `~/.rinda/bin/rinda-mcp` alongside the CLI. Claude Code launches it automatically on session start — no manual configuration needed inside the plugin.
 
-See [MCP Server (Standalone)](#mcp-server-standalone) below for usage outside the Claude Code plugin.
+See [MCP Server (Remote)](#mcp-server-remote) below for usage outside the Claude Code plugin.
 
 | Command | Description |
 |---------|-------------|
@@ -196,6 +202,19 @@ Tokens refresh automatically. Only re-authenticate if unused for 14+ days.
 | Token validity | Access: 1 hour (auto-refresh), Refresh: 14 days |
 | Credentials | CLI: `~/.rinda/credentials.json`, MCP: OAuth session tokens |
 | License | MIT |
+
+---
+
+## Development
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace -- -D warnings
+cargo test --workspace
+cargo build --release -p rinda-cli -p rinda-mcp
+```
+
+CI (`.github/workflows/ci.yml`) runs these plus JSON validation of the plugin manifests. `release-please.yml` cuts releases and builds binaries for Linux (musl x86_64/aarch64), macOS (x86_64/aarch64) and Windows. `sync-openapi.yml` keeps `doc/openapi.json` in sync.
 
 ---
 
