@@ -927,11 +927,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         StreamableHttpService::new(
             || Ok(RindaMcpServer::new()),
             Arc::new(LocalSessionManager::default()),
-            StreamableHttpServerConfig {
-                stateful_mode: true,
-                cancellation_token: ct.child_token(),
-                ..Default::default()
-            },
+            StreamableHttpServerConfig::default()
+                .with_stateful_mode(true)
+                .with_cancellation_token(ct.child_token()),
         );
 
     let app = axum::Router::new()
