@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.10](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-plugin-v0.1.9...rinda-plugin-v0.1.10) (2026-10-26)
+
+
+### Documentation
+
+* **readme:** 임베딩 검색용 최신 코드 기준 README 갱신 ([#145](https://github.com/FINGU-GRINDA/claude-rinda-plugin/issues/145)) ([b39ceb8](https://github.com/FINGU-GRINDA/claude-rinda-plugin/commit/b39ceb830dc8bed91921d1040015e35a56587688))
+
 ## [0.1.9](https://github.com/FINGU-GRINDA/claude-rinda-plugin/compare/rinda-plugin-v0.1.8...rinda-plugin-v0.1.9) (2026-03-12)
 
 
